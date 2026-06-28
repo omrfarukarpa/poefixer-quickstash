@@ -13,6 +13,11 @@
 #include <chrono>
 #include <optional>
 
+// Version + maintainer, shown in the settings panel. This is a hardened fork
+// of the original Quick Stash 1.0.
+inline constexpr const char* kQuickStashVersion    = "1.1.0";
+inline constexpr const char* kQuickStashMaintainer = "Omer Faruk ARPA";
+
 class QuickStashPlugin : public PluginSDK::Plugin {
 public:
     const char* GetName() const override { return "Quick Stash"; }
@@ -59,6 +64,8 @@ public:
         if (ctx()->ImGuiContext)
             ImGui::SetCurrentContext(static_cast<ImGuiContext*>(ctx()->ImGuiContext));
 
+        ImGui::TextDisabled("Quick Stash v%s  -  fork by %s",
+                            kQuickStashVersion, kQuickStashMaintainer);
         ImGui::Checkbox("Enable Quick Stash", &m_settings.enabled);
 
         // How-to: collapsed by default so it doesn't crowd the settings, but

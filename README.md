@@ -1,6 +1,14 @@
 # Quick Stash
 
+**Version 1.1.0** — a hardened fork of the original Quick Stash plugin,
+re-worked and maintained by **Ömer Faruk ARPA**.
+
 A [PoeFixer](https://github.com/POEFixer/PoeFixer) plugin for **Path of Exile 2** that adds a **Transfer** button on your inventory and moves items into whatever storage panel you have open (stash, vendor, trade, gamble, etc.) using Ctrl+click — similar to ExileCore’s Highlighted Items quick-stash flow.
+
+> **About this fork.** This is a community fork derived from the original
+> Quick Stash plugin (original author unknown / unlinked). Version 1.1.0 adds
+> substantial reliability and safety fixes over the original 1.0 — see
+> [Changes in 1.1.0](#changes-in-110). Fork maintained by Ömer Faruk ARPA.
 
 ## Features
 
@@ -81,6 +89,25 @@ overlay/TransferButtonOverlay.h   Transfer button UI + click handling
 ui/ExclusionGrid.h          12×5 exclusion editor in settings
 sdk/                        PoeFixer Plugin SDK headers
 ```
+
+## Changes in 1.1.0
+
+This fork hardens the original 1.0 with reliability and safety fixes:
+
+- **No more render-thread stalls.** The transfer is now a non-blocking,
+  frame-paced state machine — the old version slept on the render thread on
+  every click, hitching the game and overlay. Full framerate during transfers.
+- **Crash-safe settings.** A corrupt or hand-edited `settings.json` no longer
+  takes down the host; load/save never let an exception cross the C ABI.
+- **Reliable Ctrl+click.** Ctrl is injected by scan code (PoE2 reads raw input)
+  so items transfer instead of being picked onto the cursor.
+- **DPI-correct targeting.** Cursor moves use absolute virtual-desktop
+  coordinates, so clicks land correctly on non-100% scaling / multi-monitor.
+- **Ctrl can't get stuck.** Fail-safe release via destructor, foreground-abort
+  (alt-tab cancels), and a watchdog timeout.
+- **Live click coordinates** (handles a panel that moves/scrolls mid-transfer),
+  **cursor restore** after a transfer, an **exclusion-grid colour legend**, a
+  collapsible **How to use** guide, and an empty-queue notice.
 
 ## Disclaimer
 
