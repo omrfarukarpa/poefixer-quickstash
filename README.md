@@ -19,9 +19,13 @@ A [PoeFixer](https://github.com/POEFixer/PoeFixer) plugin for **Path of Exile 2*
 - **Safety options** — Cancel on right-click; stop if inventory closes mid-transfer.
 - **Button position** — Optional X/Y offset sliders; default placement is built in (offsets `0` / `0` = standard spot above the grid).
 
-<img width="1135" height="697" alt="image" src="https://github.com/user-attachments/assets/6bc10c68-94ff-469c-a25f-4bae9ed31d2f" />
+### Settings panel
 
-<img width="672" height="1179" alt="image" src="https://github.com/user-attachments/assets/29429aa9-5f4c-4bae-8754-33daa5018649" />
+![Quick Stash settings panel](docs/1.png)
+
+### Transfer button in-game
+
+![The transfer button above the inventory grid](docs/2.png)
 
 
 ## Requirements
