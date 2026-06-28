@@ -1,0 +1,17 @@
+# Normalize line endings: store text as LF in the repo, check out native.
+* text=auto
+
+# Source files are CRLF on checkout (Windows / Visual Studio project).
+*.cpp text eol=crlf
+*.h   text eol=crlf
+*.hpp text eol=crlf
+*.sln text eol=crlf
+*.vcxproj text eol=crlf
+
+# Keep these LF.
+*.md  text eol=lf
+LICENSE text eol=lf
+
+# Binaries (if ever added) are not diffed.
+*.dll binary
+*.png binary
