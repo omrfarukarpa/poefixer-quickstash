@@ -17,6 +17,11 @@ struct ClickTarget {
     int slotY = 0;
 };
 
+struct ScreenPoint {
+    int x = 0;
+    int y = 0;
+};
+
 inline float SlotCenterX(const PluginSDK::Inventory& inv, int slotX) {
     return inv.Grid.GridScreenX + (static_cast<float>(slotX) + 0.5f) * inv.Grid.CellSize;
 }

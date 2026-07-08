@@ -1,24 +1,35 @@
 # Quick Stash
 
-**Version 1.1.1** — a hardened fork of the original Quick Stash plugin,
-re-worked and maintained by **Ömer Faruk ARPA**.
+**Version 1.2.0** — written and maintained by **Ömer Faruk ARPA**.
 
-A [PoeFixer](https://github.com/POEFixer/PoeFixer) plugin for **Path of Exile 2** that adds a **Transfer** button on your inventory and moves items into whatever storage panel you have open (stash, vendor, trade, gamble, etc.) using Ctrl+click — similar to ExileCore’s Highlighted Items quick-stash flow.
+A [PoeFixer](https://github.com/POEFixer/PoeFixer) plugin for **Path of Exile 2** with two one-click flows:
 
-> **About this fork.** This is a community fork derived from the original
-> Quick Stash plugin (original author unknown / unlinked). Version 1.1.x adds
-> substantial reliability and safety fixes over the original 1.0 — see
-> [Changes in 1.1.1](#changes-in-111) and [Changes in 1.1.0](#changes-in-110).
-> Fork maintained by Ömer Faruk ARPA.
+- **Transfer** — dump your inventory into whatever storage panel is open (stash, vendor, trade, gamble, …) via Ctrl+click.
+- **TAKE (new in 1.2.0)** — the reverse: pull items **out** of the open stash tab back into your inventory. Type in Path of Exile's own **"Highlight Items"** search box and a **TAKE** button appears right above it; it Ctrl+clicks every matching item back to your bag.
+
+> **About.** This is now effectively a ground-up plugin. It began from the
+> QuickStash idea — a Ctrl+click quick-stash button (original author
+> unknown / unlinked) — but the current codebase is its own implementation:
+> a non-blocking, frame-paced click state machine; the TAKE / withdraw flow;
+> reading Path of Exile's native "Highlight Items" box through the UI tree;
+> and extensive crash-hardening and safety work. Written and maintained by
+> Ömer Faruk ARPA. See [Changes in 1.2.0](#changes-in-120),
+> [1.1.1](#changes-in-111), and [1.1.0](#changes-in-110).
 
 ## Features
 
 - **Transfer button** — Appears above your backpack grid whenever the main inventory is open.
 - **One-click dump** — Ctrl+clicks every non-excluded occupied slot into the panel on the other side of the trade (stash tab, shop, player trade, etc.).
+- **TAKE (withdraw)** — Ctrl+clicks matching items **out** of the open stash tab and into your inventory. Filtered live by whatever you type in Path of Exile's native **"Highlight Items"** search box — no separate input to manage.
+  - **Live highlight overlay** draws a box around every item TAKE will grab, so you see the selection before clicking.
+  - **`TAKE (N)`** shows the number of Ctrl+clicks (item stacks); for stacked currency it also shows the **total quantity** (e.g. `TAKE (3)  x30` for three stacks of 10).
+  - Works on normal grid tabs **and** special/affinity tabs (currency, fragments, …) via automatic per-item / grid coordinate resolution.
+  - **Never targets your own bag, equipment, or charm slots.**
 - **Exclusion grid** — Click cells in settings to skip slots (weapon column excluded by default). Presets: weapon column only, clear all, select all.
 - **Timing controls** — Click delay, post-click delay, cursor settle, and hold Ctrl after the last click for reliable transfers.
 - **Safety options** — Cancel on right-click; stop if inventory closes mid-transfer.
 - **Button position** — Optional X/Y offset sliders; default placement is built in (offsets `0` / `0` = standard spot above the grid).
+- **Debug mode** — Optional inventory / UI-tree inspectors, off by default (no overhead unless enabled).
 
 ### Settings panel
 
@@ -63,12 +74,25 @@ Pre-built binaries are published on GitHub:
 
 ## Usage
 
+### Transfer (inventory → stash)
+
 1. Open your character inventory.
 2. Open the target inventory (Stash, Shop, Trade...).
 3. Click **transfer** on the button above the grid.
 4. Items move in slot order; excluded cells and empty slots are skipped.
 
 Right-click during a transfer cancels it (if enabled in settings).
+
+### TAKE (stash → inventory)
+
+1. Open your character inventory **and** a stash tab.
+2. Type in Path of Exile's own **"Highlight Items"** box at the bottom of the screen (e.g. a base type or unique name). Leave it empty to take everything on the tab.
+3. Matching items are outlined; a **TAKE (N)** button appears just above the Highlight Items box.
+4. Click **TAKE** — every outlined item is Ctrl+clicked back into your inventory.
+
+Right-click / alt-tab cancels a running TAKE, same as transfer.
+
+> **Note on filtering.** TAKE matches your search text against each item's **base type, unique name, and internal path** (and future builds, item mods). It reads what you type in Path of Exile's native highlight box, so the plugin does not add its own text field.
 
 ## Build from source
 
@@ -88,12 +112,41 @@ Copy the DLL to `Plugins\QuickStash\` in your PoeFixer directory, same as the re
 ```
 QuickStash.cpp              Plugin entry (lifecycle, settings UI, overlay)
 config/Settings.h           JSON settings (delays, exclusions, offsets)
-game/                       Inventory detection, transfer queue, click planner
+game/PanelDetector.h        Inventory / open-stash detection
+game/TransferPlanner.h      Transfer click queue + grid coordinate math
+game/TransferState.h        Non-blocking, frame-paced click state machine
+game/WithdrawPlanner.h      TAKE: candidate collection, filter, screen-rect resolution
+game/PoeHighlight.h         Reads PoE's native "Highlight Items" box via the UI tree
 input/Win32Input.h          Cursor move + Ctrl+LMB via SendInput
-overlay/TransferButtonOverlay.h   Transfer button UI + click handling
+overlay/TransferButtonOverlay.h   Transfer / TAKE button UI + click handling
 ui/ExclusionGrid.h          12×5 exclusion editor in settings
+ui/InventoryDiagnostics.h   Debug-mode inventory / UI-tree inspectors
 sdk/                        PoeFixer Plugin SDK headers
 ```
+
+## Changes in 1.2.0
+
+Adds the **TAKE (withdraw)** flow and quality-of-life work:
+
+- **TAKE / withdraw button** — pulls matching items out of the open stash tab
+  back into your inventory, driven through the same hardened, non-blocking
+  click state machine as Transfer (all Ctrl-hold / alt-tab-abort / watchdog
+  fail-safes apply).
+- **Reads Path of Exile's native "Highlight Items" box** via the host UI tree —
+  you filter with the game's own search field; the plugin adds no separate input.
+  The **TAKE** button is placed right above that box.
+- **Live selection overlay** outlines every item TAKE will grab.
+- **Smart counting** — `TAKE (N)` counts stacks/clicks; stacked currency also
+  shows the **total quantity** (e.g. `TAKE (3)  x30`).
+- **Robust targeting** — per-item screen rects on special/affinity tabs
+  (currency, fragments, …), grid math on normal tabs; small equipment
+  inventories (charms/flask) and the player's own bag are never targeted.
+- **Debug mode** toggle gates the inventory / UI-tree inspectors (off by
+  default, zero overhead when off).
+
+> Known limitation: TAKE matches base type / unique name / item path. Matching
+> against item **mod text** (e.g. highlight every item with a fire-resistance
+> mod) is planned but disabled in this build for host stability.
 
 ## Changes in 1.1.1
 
@@ -109,7 +162,7 @@ Maintenance release — rebuilt for **PoeFixer update 268**:
 
 ## Changes in 1.1.0
 
-This fork hardens the original 1.0 with reliability and safety fixes:
+Hardened the original 1.0 concept with reliability and safety fixes:
 
 - **No more render-thread stalls.** The transfer is now a non-blocking,
   frame-paced state machine — the old version slept on the render thread on

@@ -6,6 +6,7 @@
 #include <array>
 #include <filesystem>
 #include <fstream>
+#include <string>
 
 namespace QuickStashConfig {
 
@@ -33,6 +34,7 @@ struct Settings {
     int  completionHoldMs = 125;
     bool cancelOnRightClick = true;
     bool verifyPanelsOpen = true;
+    bool debugMode = false;
     float buttonOffsetX = 0.f;
     float buttonOffsetY = 0.f;
 
@@ -85,6 +87,7 @@ struct Settings {
                                           kCompletionHoldMinMs, kCompletionHoldMaxMs);
             cancelOnRightClick = j.value("cancel_on_right_click", cancelOnRightClick);
             verifyPanelsOpen = j.value("verify_panels_open", verifyPanelsOpen);
+            debugMode = j.value("debug_mode", debugMode);
             buttonOffsetX = j.value("button_offset_x", buttonOffsetX);
             buttonOffsetY = j.value("button_offset_y", buttonOffsetY);
 
@@ -119,6 +122,7 @@ struct Settings {
         j["completion_hold_ms"] = completionHoldMs;
         j["cancel_on_right_click"] = cancelOnRightClick;
         j["verify_panels_open"] = verifyPanelsOpen;
+        j["debug_mode"] = debugMode;
         j["button_offset_x"] = buttonOffsetX;
         j["button_offset_y"] = buttonOffsetY;
 

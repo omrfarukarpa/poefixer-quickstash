@@ -59,10 +59,18 @@ inline bool Win32LeftClickOnRect(ImVec2 p0, ImVec2 p1) {
     return clicked;
 }
 
+inline constexpr float kButtonGap = 6.f;
+
 inline ImVec2 TransferButtonPos(const PluginSDK::Inventory& inv,
                                 const QuickStashConfig::Settings& settings) {
     return ImVec2(inv.Grid.GridScreenX + kButtonBaseOffsetX + settings.buttonOffsetX,
                   inv.Grid.GridScreenY + kButtonBaseOffsetY + settings.buttonOffsetY);
+}
+
+inline ImVec2 WithdrawButtonPos(const PluginSDK::Inventory& inv,
+                                const QuickStashConfig::Settings& settings) {
+    const ImVec2 t = TransferButtonPos(inv, settings);
+    return ImVec2(t.x + kButtonW + kButtonGap, t.y);
 }
 
 inline ImVec2 TransferButtonMax(const ImVec2& p0) {
@@ -75,10 +83,10 @@ inline bool IsMouseOverTransferButton(const PluginSDK::Inventory& inv,
     return HitRect(ImGui::GetIO().MousePos, p0, TransferButtonMax(p0));
 }
 
-inline TransferButtonResult DrawTransferButton(const PluginSDK::Inventory& inv,
-                                               const QuickStashConfig::Settings& settings) {
+inline TransferButtonResult DrawOverlayButton(const ImVec2& pos,
+                                              const char* label,
+                                              const char* windowId) {
     TransferButtonResult r;
-    const ImVec2 pos = TransferButtonPos(inv, settings);
     const ImVec2 size(kButtonW, kButtonH);
     r.btnP0 = pos;
     r.btnP1 = TransferButtonMax(pos);
@@ -108,9 +116,9 @@ inline TransferButtonResult DrawTransferButton(const PluginSDK::Inventory& inv,
                                  | ImGuiWindowFlags_NoBringToFrontOnFocus
                                  | ImGuiWindowFlags_NoNav;
 
-    r.beginOk = ImGui::Begin("##quick_stash_transfer", nullptr, flags);
+    r.beginOk = ImGui::Begin(windowId, nullptr, flags);
     if (r.beginOk) {
-        r.clicked = ImGui::Button("transfer", size);
+        r.clicked = ImGui::Button(label, size);
         r.hovered = ImGui::IsItemHovered();
         r.held = ImGui::IsItemActive();
         if (!r.clicked && r.hovered
@@ -126,10 +134,22 @@ inline TransferButtonResult DrawTransferButton(const PluginSDK::Inventory& inv,
     return r;
 }
 
-inline void DrawTransferProgress(int index, int total) {
+inline TransferButtonResult DrawTransferButton(const PluginSDK::Inventory& inv,
+                                               const QuickStashConfig::Settings& settings) {
+    return DrawOverlayButton(TransferButtonPos(inv, settings), "transfer",
+                             "##quick_stash_transfer");
+}
+
+inline TransferButtonResult DrawWithdrawButtonAt(const ImVec2& pos, int count) {
+    char label[32];
+    snprintf(label, sizeof(label), "TAKE (%d)", count);
+    return DrawOverlayButton(pos, label, "##quick_stash_withdraw");
+}
+
+inline void DrawTransferProgress(int index, int total, const char* verb = "Transferring") {
     if (total <= 0) return;
     char buf[64];
-    snprintf(buf, sizeof(buf), "Transferring: %d / %d", index, total);
+    snprintf(buf, sizeof(buf), "%s: %d / %d", verb, index, total);
     ImGui::GetForegroundDrawList()->AddText(ImVec2(12.f, 12.f), IM_COL32(205, 180, 110, 255), buf);
 }
 

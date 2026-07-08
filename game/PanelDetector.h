@@ -51,7 +51,8 @@ inline bool IsPlayerSlotName(const char* name) {
     if (!name) return true;  // no name -> not a usable stash target
     static const char* kSlotPrefixes[] = {
         "MainInventory", "BodyArmour", "Weapon", "Offhand", "Helm", "Amulet",
-        "Ring", "Gloves", "Boots", "Belt", "Flask", "Cursor", "Trinket"};
+        "Ring", "Gloves", "Boots", "Belt", "Flask", "Cursor", "Trinket",
+        "Charm"};
     for (const char* p : kSlotPrefixes) {
         size_t n = 0;
         while (p[n] != '\0') ++n;

@@ -20,7 +20,8 @@ class TransferState {
 public:
     bool IsRunning() const { return m_running || m_finishing; }
     int  ProgressIndex() const { return m_index; }
-    int  ProgressTotal() const { return static_cast<int>(m_queue.size()); }
+    int  ProgressTotal() const { return ActiveQueueSize(); }
+    bool IsWithdrawMode() const { return m_useScreenPoints; }
 
     // Release Ctrl no matter how the object dies (e.g. host destroys the
     // plugin without calling OnDisable). Without this, a leaked CtrlUp leaves
@@ -34,6 +35,8 @@ public:
                const PluginSDK::Inventory& inv) {
         if (!ctx || m_running || m_finishing) return;
         m_settings = settings;
+        m_useScreenPoints = false;
+        m_screenQueue.clear();
         m_queue = BuildClickQueue(inv, settings);
         m_index = 0;
         m_ctrlHeld = false;
@@ -61,6 +64,35 @@ public:
                        + " items").c_str());
     }
 
+    void StartWithdraw(const PluginSDK::Context* ctx,
+                       const QuickStashConfig::Settings& settings,
+                       std::vector<ScreenPoint> points) {
+        if (!ctx || m_running || m_finishing) return;
+        m_settings = settings;
+        m_useScreenPoints = true;
+        m_screenQueue = std::move(points);
+        m_queue.clear();
+        m_index = 0;
+        m_ctrlHeld = false;
+        m_finishing = false;
+        m_phase = ClickPhase::Spacing;
+        m_running = !m_screenQueue.empty();
+        m_startedAt = std::chrono::steady_clock::now();
+        m_lastClick = m_startedAt - std::chrono::milliseconds(m_settings.clickDelayMs);
+
+        if (!m_running) {
+            ctx->Log.Info("Quick Stash: nothing to withdraw (no matching on-screen items)");
+            return;
+        }
+
+        m_haveSavedCursor = QuickStashInput::GetCursorScreen(m_savedCursorX, m_savedCursorY);
+
+        QuickStashInput::CtrlDown();
+        m_ctrlHeld = true;
+        ctx->Log.Info(("Quick Stash: withdrawing " + std::to_string(m_screenQueue.size())
+                       + " items").c_str());
+    }
+
     void Abort() {
         if (m_ctrlHeld) {
             QuickStashInput::CtrlUp();
@@ -75,6 +107,8 @@ public:
         m_finishing = false;
         m_phase = ClickPhase::Spacing;
         m_queue.clear();
+        m_screenQueue.clear();
+        m_useScreenPoints = false;
         m_index = 0;
     }
 
@@ -126,21 +160,23 @@ public:
                 // click completed before starting the next one.
                 if (Elapsed(now, m_lastClick) < m_settings.clickDelayMs)
                     return;
-                if (m_index >= static_cast<int>(m_queue.size())) {
+                if (m_index >= ActiveQueueSize()) {
                     BeginFinishing(now);
                     return;
                 }
-                // Recompute the screen position from the LIVE grid at click
-                // time, so a panel that moved/scrolled since Start() is still
-                // targeted correctly. If the grid is momentarily unavailable,
-                // skip this frame and retry next Tick (verifyPanelsOpen above
-                // already cancels a genuinely-closed inventory).
-                if (!inventoryOpen)
-                    return;
-                const auto& target = m_queue[static_cast<size_t>(m_index)];
-                QuickStashInput::MoveCursorScreen(
-                    static_cast<int>(SlotCenterX(*live, target.slotX) + 0.5f),
-                    static_cast<int>(SlotCenterY(*live, target.slotY) + 0.5f));
+                int clickX, clickY;
+                if (m_useScreenPoints) {
+                    const auto& p = m_screenQueue[static_cast<size_t>(m_index)];
+                    clickX = p.x;
+                    clickY = p.y;
+                } else {
+                    if (!inventoryOpen)
+                        return;
+                    const auto& target = m_queue[static_cast<size_t>(m_index)];
+                    clickX = static_cast<int>(SlotCenterX(*live, target.slotX) + 0.5f);
+                    clickY = static_cast<int>(SlotCenterY(*live, target.slotY) + 0.5f);
+                }
+                QuickStashInput::MoveCursorScreen(clickX, clickY);
                 m_phaseSince = now;
                 m_phase = ClickPhase::Settling;
                 return;
@@ -161,7 +197,7 @@ public:
                 ++m_index;
                 m_lastClick = now;          // spacing is measured from here
                 m_phase = ClickPhase::Spacing;
-                if (m_index >= static_cast<int>(m_queue.size()))
+                if (m_index >= ActiveQueueSize())
                     BeginFinishing(now);
                 return;
             }
@@ -181,6 +217,11 @@ private:
         return std::chrono::duration_cast<std::chrono::milliseconds>(now - since).count();
     }
 
+    int ActiveQueueSize() const {
+        return static_cast<int>(m_useScreenPoints ? m_screenQueue.size()
+                                                   : m_queue.size());
+    }
+
     // Generous upper bound on how long the whole transfer may take: the sum of
     // per-click worst-case timings, tripled for frame-pacing/jitter slack, plus
     // a flat floor. Past this we assume something wedged and bail.
@@ -188,7 +229,7 @@ private:
         const long long perClick = static_cast<long long>(m_settings.clickDelayMs)
                                   + m_settings.cursorSettleMs
                                   + m_settings.postClickDelayMs;
-        const long long items = static_cast<long long>(m_queue.size());
+        const long long items = static_cast<long long>(ActiveQueueSize());
         return 5000 + perClick * items * 3 + m_settings.completionHoldMs;
     }
 
@@ -221,12 +262,14 @@ private:
     bool m_finishing = false;
     bool m_ctrlHeld = false;
     bool m_haveSavedCursor = false;
+    bool m_useScreenPoints = false;
     int  m_index = 0;
     int  m_savedCursorX = 0;
     int  m_savedCursorY = 0;
     ClickPhase m_phase = ClickPhase::Spacing;
     QuickStashConfig::Settings m_settings{};
     std::vector<ClickTarget> m_queue;
+    std::vector<ScreenPoint> m_screenQueue;
     std::chrono::steady_clock::time_point m_startedAt{};
     std::chrono::steady_clock::time_point m_lastClick{};
     std::chrono::steady_clock::time_point m_phaseSince{};
