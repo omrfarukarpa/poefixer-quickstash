@@ -1,14 +1,15 @@
 # Quick Stash
 
-**Version 1.1.0** — a hardened fork of the original Quick Stash plugin,
+**Version 1.1.1** — a hardened fork of the original Quick Stash plugin,
 re-worked and maintained by **Ömer Faruk ARPA**.
 
 A [PoeFixer](https://github.com/POEFixer/PoeFixer) plugin for **Path of Exile 2** that adds a **Transfer** button on your inventory and moves items into whatever storage panel you have open (stash, vendor, trade, gamble, etc.) using Ctrl+click — similar to ExileCore’s Highlighted Items quick-stash flow.
 
 > **About this fork.** This is a community fork derived from the original
-> Quick Stash plugin (original author unknown / unlinked). Version 1.1.0 adds
+> Quick Stash plugin (original author unknown / unlinked). Version 1.1.x adds
 > substantial reliability and safety fixes over the original 1.0 — see
-> [Changes in 1.1.0](#changes-in-110). Fork maintained by Ömer Faruk ARPA.
+> [Changes in 1.1.1](#changes-in-111) and [Changes in 1.1.0](#changes-in-110).
+> Fork maintained by Ömer Faruk ARPA.
 
 ## Features
 
@@ -93,6 +94,18 @@ overlay/TransferButtonOverlay.h   Transfer button UI + click handling
 ui/ExclusionGrid.h          12×5 exclusion editor in settings
 sdk/                        PoeFixer Plugin SDK headers
 ```
+
+## Changes in 1.1.1
+
+Maintenance release — rebuilt for **PoeFixer update 268**:
+
+- **Synced to the current Plugin SDK v6 headers** (matches PoeFixer 268, which
+  moved all hardcoded offsets into the core and fixed the GameUI / RootUI
+  offsets). The transfer button now positions off the host-corrected inventory
+  grid coordinates.
+- **No behavioural changes.** The consumed SDK surface is unchanged
+  (append-only ABI), so this is a compatibility rebuild — every fix from 1.1.0
+  carries over as-is.
 
 ## Changes in 1.1.0
 

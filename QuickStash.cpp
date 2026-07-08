@@ -15,7 +15,7 @@
 
 // Version + maintainer, shown in the settings panel. This is a hardened fork
 // of the original Quick Stash 1.0.
-inline constexpr const char* kQuickStashVersion    = "1.1.0";
+inline constexpr const char* kQuickStashVersion    = "1.1.1";
 inline constexpr const char* kQuickStashMaintainer = "Omer Faruk ARPA";
 
 class QuickStashPlugin : public PluginSDK::Plugin {
