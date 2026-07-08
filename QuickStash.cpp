@@ -8,6 +8,7 @@
 #include "game/TransferState.h"
 #include "overlay/TransferButtonOverlay.h"
 #include "ui/ExclusionGrid.h"
+#include "ui/InventoryDiagnostics.h"
 
 #include <imgui.h>
 #include <chrono>
@@ -111,6 +112,9 @@ public:
 
         ImGui::Separator();
         QuickStashUi::DrawExclusionGrid(m_settings);
+
+        ImGui::Separator();
+        QuickStashUi::DrawInventoryDiagnostics(ctx());
     }
 
     void DrawUI() override {
