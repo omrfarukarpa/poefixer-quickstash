@@ -16,6 +16,10 @@ A [PoeFixer](https://github.com/POEFixer/PoeFixer) plugin for **Path of Exile 2*
 > Ömer Faruk ARPA. See [Changes in 1.2.0](#changes-in-120),
 > [1.1.1](#changes-in-111), and [1.1.0](#changes-in-110).
 
+## Demo
+
+![Quick Stash — Transfer and TAKE in action](https://media0.giphy.com/media/v1.Y2lkPTc5MGI3NjExemQweWU4amswMHNsZG00Z2tkZno1bWx3NTFydWxxdzE4bzRwMTF0eCZlcD12MV9pbnRlcm5hbF9naWZfYnlfaWQmY3Q9Zw/5sFbkzLfqQnQB4kHGI/giphy.gif)
+
 ## Features
 
 - **Transfer button** — Appears above your backpack grid whenever the main inventory is open.
