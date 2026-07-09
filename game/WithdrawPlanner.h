@@ -9,6 +9,7 @@
 #include <cctype>
 #include <optional>
 #include <string>
+#include <unordered_map>
 #include <vector>
 
 namespace QuickStashGame {
@@ -41,38 +42,110 @@ inline bool ContainsCI(const std::string& hay, const std::string& needle) {
     return false;
 }
 
-inline bool g_withdrawReadMods = false;
+inline constexpr int kMaxModReadsPerScan = 40;
+inline constexpr size_t kModCacheMax = 4000;
 
-inline std::string BuildItemSearchText(const PluginSDK::Context* ctx,
-                                       const PluginSDK::InventoryItem& item) {
+inline constexpr int kAggItemRarity           = 8206;
+inline constexpr int kAggPackSize             = 8207;
+inline constexpr int kAggMonsterRarity        = 8208;
+inline constexpr int kAggMonsterEffectiveness = 8209;
+inline constexpr int kAggWaystoneDropChance   = 8210;
+
+inline const char* AggregatedLabel(int key) {
+    switch (key) {
+        case kAggItemRarity:           return "Item Rarity";
+        case kAggPackSize:             return "Monster Pack Size";
+        case kAggMonsterRarity:        return "Monster Rarity";
+        case kAggMonsterEffectiveness: return "Monster Effectiveness";
+        case kAggWaystoneDropChance:   return "Waystone Drop Chance";
+        default:                       return nullptr;
+    }
+}
+
+inline std::string BuildNameSearchText(const PluginSDK::InventoryItem& item) {
     std::string s;
-    s.reserve(256);
+    s.reserve(128);
     s += item.BaseTypeName;
     s += '\n';
     s += item.UniqueName;
-    s += '\n';
-    s += item.Path;
-    if (g_withdrawReadMods && ctx && item.Address) {
-        const auto mods = ctx->Inventory.ReadItemMods(item.Address);
-        const std::vector<const std::vector<PluginSDK::Mod>*> groups = {
-            &mods.ImplicitMods, &mods.ExplicitMods, &mods.EnchantMods,
-            &mods.HellscapeMods, &mods.CrucibleMods};
-        for (const auto* g : groups) {
-            for (const auto& m : *g) {
-                s += '\n';
-                s += m.AffixName;
-                s += '\n';
-                s += m.Name;
-                const auto line = ctx->Inventory.FormatStat(m.StatKey, m.Value0, m.Value1);
-                if (!line.empty()) {
-                    s += '\n';
-                    s += line;
-                }
-            }
+    return s;
+}
+
+inline std::string BuildModText(const PluginSDK::Context* ctx,
+                                const PluginSDK::InventoryItem& item) {
+    std::string s;
+    if (!ctx || !item.Address) return s;
+    if (ctx->Inventory.ReadItemBaseTypeName(item.Address).empty()) return s;
+    const auto mods = ctx->Inventory.ReadItemMods(item.Address);
+    const std::vector<const std::vector<PluginSDK::Mod>*> groups = {
+        &mods.ImplicitMods, &mods.ExplicitMods, &mods.EnchantMods,
+        &mods.HellscapeMods, &mods.CrucibleMods};
+    for (const auto* g : groups) {
+        for (const auto& m : *g) {
+            if (!m.AffixName.empty()) { s += '\n'; s += m.AffixName; }
+            if (!m.Name.empty())      { s += '\n'; s += m.Name; }
+            if (!m.Id.empty())        { s += '\n'; s += m.Id; }
+            if (!m.StatKey.empty())   { s += '\n'; s += m.StatKey; }
+            const auto line = ctx->Inventory.FormatStat(m.StatKey, m.Value0, m.Value1);
+            if (!line.empty())        { s += '\n'; s += line; }
+        }
+    }
+    for (const auto& kv : ctx->Inventory.ReadItemAggregatedStats(item.Address)) {
+        if (kv.second == 0) continue;
+        if (const char* lbl = AggregatedLabel(kv.first)) {
+            s += '\n';
+            s += lbl;
         }
     }
     return s;
 }
+
+inline std::string DebugAggregatedPairs(const PluginSDK::Context* ctx,
+                                        const PluginSDK::InventoryItem& item) {
+    std::string s;
+    if (!ctx || !item.Address) return s;
+    if (ctx->Inventory.ReadItemBaseTypeName(item.Address).empty()) return s;
+    for (const auto& kv : ctx->Inventory.ReadItemAggregatedStats(item.Address)) {
+        s += std::to_string(kv.first);
+        s += ':';
+        s += std::to_string(kv.second);
+        s += ' ';
+    }
+    return s;
+}
+
+class ModTextCache {
+public:
+    void BeginScan() {
+        m_budget = kMaxModReadsPerScan;
+        if (m_map.size() > kModCacheMax) m_map.clear();
+    }
+
+    const std::string& Get(const PluginSDK::Context* ctx,
+                           const PluginSDK::InventoryItem& item) {
+        Entry& e = m_map[item.Address];
+        if (e.sourcePath != item.Path) {
+            e.sourcePath = item.Path;
+            e.read = false;
+            e.text.clear();
+        }
+        if (!e.read && m_budget > 0) {
+            e.text = BuildModText(ctx, item);
+            e.read = true;
+            --m_budget;
+        }
+        return e.text;
+    }
+
+private:
+    struct Entry {
+        std::string sourcePath;
+        std::string text;
+        bool read = false;
+    };
+    std::unordered_map<uintptr_t, Entry> m_map;
+    int m_budget = 0;
+};
 
 inline bool GridLayoutPlausible(const PluginSDK::Inventory& inv, float displayW) {
     if (inv.TotalBoxesY < 6) return false;
@@ -141,7 +214,8 @@ struct WithdrawCandidate {
 
 inline std::vector<WithdrawCandidate> CollectCandidates(
     const PluginSDK::Context* ctx, const PluginSDK::Inventory& inv,
-    float displayW, float displayH) {
+    float displayW, float displayH, ModTextCache* modCache, bool readMods) {
+    if (modCache) modCache->BeginScan();
     std::vector<WithdrawCandidate> out;
     for (const auto& item : inv.Items) {
         const auto r = ResolveItemRect(inv, item, displayW, displayH);
@@ -151,7 +225,11 @@ inline std::vector<WithdrawCandidate> CollectCandidates(
         c.slotX = item.SlotX;
         c.stack = item.StackCount;
         c.rect = *r;
-        c.search = BuildItemSearchText(ctx, item);
+        c.search = BuildNameSearchText(item);
+        if (readMods && modCache) {
+            const std::string& mt = modCache->Get(ctx, item);
+            c.search += mt;
+        }
         out.push_back(std::move(c));
     }
     std::sort(out.begin(), out.end(),

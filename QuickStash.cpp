@@ -21,9 +21,7 @@
 #include <utility>
 #include <vector>
 
-// Version + maintainer, shown in the settings panel. This is a hardened fork
-// of the original Quick Stash 1.0.
-inline constexpr const char* kQuickStashVersion    = "1.2.0";
+inline constexpr const char* kQuickStashVersion    = "1.3.0";
 inline constexpr const char* kQuickStashMaintainer = "Omer Faruk ARPA";
 
 class QuickStashPlugin : public PluginSDK::Plugin {
@@ -125,11 +123,17 @@ public:
             "Withdraw (TAKE): type in PoE's own 'Highlight Items' box; the TAKE "
             "button above it Ctrl+clicks the matching items in the open stash back "
             "into your inventory. Caution: with a vendor open, Ctrl+click buys.");
+        ImGui::Checkbox("Match item mods in filter", &m_settings.readMods);
+        ImGui::TextDisabled(
+            "When on, the filter also matches an item's mods (e.g. 'waystone', "
+            "'rarity'), like PoE's own highlight. Turn off if reading item data "
+            "ever causes a crash.");
 
         ImGui::Separator();
         ImGui::Checkbox("Debug mode (inventory / UI tree inspectors)", &m_settings.debugMode);
         if (m_settings.debugMode) {
             QuickStashUi::DrawInventoryDiagnostics(ctx());
+            QuickStashUi::DrawWithdrawHaystackDump(ctx());
             QuickStashUi::DrawUiTreeDiagnostics(ctx());
         }
     }
@@ -168,13 +172,12 @@ public:
         UpdateWithdraw();
         DrawWithdrawHighlights();
 
-        const ImVec2 takePos = m_poeFound
-            ? ImVec2(m_poeX, m_poeY - QuickStashOverlay::kButtonH - 6.f)
-            : QuickStashOverlay::WithdrawButtonPos(*m_backpack, m_settings);
+        const bool showWithdraw = m_poeFound && m_stashOpen;
+        const ImVec2 takePos(m_poeX, m_poeY - QuickStashOverlay::kButtonH - 6.f);
 
         const bool mouseOverTransfer =
             QuickStashOverlay::IsMouseOverTransferButton(*m_backpack, m_settings);
-        const bool mouseOverWithdraw = QuickStashOverlay::HitRect(
+        const bool mouseOverWithdraw = showWithdraw && QuickStashOverlay::HitRect(
             ImGui::GetIO().MousePos, takePos,
             ImVec2(takePos.x + QuickStashOverlay::kButtonW,
                    takePos.y + QuickStashOverlay::kButtonH));
@@ -183,24 +186,27 @@ public:
         ctx()->Overlay.SetWantsOverlayInput(mouseOverBtn || m_overlayCaptureApplied);
 
         const auto tbtn = QuickStashOverlay::DrawTransferButton(*m_backpack, m_settings);
-        const auto wbtn = QuickStashOverlay::DrawWithdrawButtonAt(takePos, m_withdrawCount);
 
-        if (m_withdrawCount > 0 && m_withdrawQty != m_withdrawCount) {
-            char q[24];
-            snprintf(q, sizeof(q), "x%d", m_withdrawQty);
-            ImGui::GetForegroundDrawList()->AddText(
-                ImVec2(takePos.x + QuickStashOverlay::kButtonW + 8.f, takePos.y + 5.f),
-                IM_COL32(150, 210, 255, 255), q);
+        QuickStashOverlay::TransferButtonResult wbtn;
+        if (showWithdraw) {
+            wbtn = QuickStashOverlay::DrawWithdrawButtonAt(takePos, m_withdrawCount);
+            if (m_withdrawCount > 0 && m_withdrawQty != m_withdrawCount) {
+                char q[24];
+                snprintf(q, sizeof(q), "x%d", m_withdrawQty);
+                ImGui::GetForegroundDrawList()->AddText(
+                    ImVec2(takePos.x + QuickStashOverlay::kButtonW + 8.f, takePos.y + 5.f),
+                    IM_COL32(150, 210, 255, 255), q);
+            }
         }
 
         bool transferActivated = QuickStashOverlay::TransferButtonActivated(tbtn);
-        bool withdrawActivated = QuickStashOverlay::TransferButtonActivated(wbtn);
+        bool withdrawActivated = showWithdraw && QuickStashOverlay::TransferButtonActivated(wbtn);
 
         if (!transferActivated && !withdrawActivated) {
             if (mouseOverTransfer || tbtn.hovered) {
                 if (QuickStashOverlay::Win32LeftClickOnRect(tbtn.btnP0, tbtn.btnP1))
                     transferActivated = true;
-            } else if (mouseOverWithdraw || wbtn.hovered) {
+            } else if (showWithdraw && (mouseOverWithdraw || wbtn.hovered)) {
                 if (QuickStashOverlay::Win32LeftClickOnRect(wbtn.btnP0, wbtn.btnP1))
                     withdrawActivated = true;
             }
@@ -248,9 +254,13 @@ public:
             m_candidates.clear();
             m_withdrawTargets.clear();
             m_withdrawCount = 0;
+            m_stashOpen = false;
             return;
         }
-        m_candidates = QuickStashGame::CollectCandidates(ctx(), *stash, disp.x, disp.y);
+        m_stashOpen = true;
+        const bool needMods = m_settings.readMods && !filter.empty();
+        m_candidates = QuickStashGame::CollectCandidates(
+            ctx(), *stash, disp.x, disp.y, &m_modCache, needMods);
         auto sel = QuickStashGame::FilterCandidates(m_candidates, filter);
         m_withdrawTargets = std::move(sel.rects);
         m_withdrawCount = static_cast<int>(m_withdrawTargets.size());
@@ -280,6 +290,7 @@ private:
     bool m_overlayCaptureApplied = false;
     int m_withdrawCount = 0;
     int m_withdrawQty = 0;
+    bool m_stashOpen = false;
     std::string m_poeFilter;
     bool m_poeFound = false;
     float m_poeX = 0.f;
@@ -287,6 +298,7 @@ private:
     std::chrono::steady_clock::time_point m_lastPoeRead{};
     std::vector<QuickStashGame::ScreenRect> m_withdrawTargets;
     std::vector<QuickStashGame::WithdrawCandidate> m_candidates;
+    QuickStashGame::ModTextCache m_modCache;
 
     // Refresh the cached backpack snapshot at most every 150 ms. During a
     // transfer this also keeps m_backpack's grid current so TransferState can

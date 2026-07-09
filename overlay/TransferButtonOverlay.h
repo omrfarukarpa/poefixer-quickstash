@@ -59,18 +59,10 @@ inline bool Win32LeftClickOnRect(ImVec2 p0, ImVec2 p1) {
     return clicked;
 }
 
-inline constexpr float kButtonGap = 6.f;
-
 inline ImVec2 TransferButtonPos(const PluginSDK::Inventory& inv,
                                 const QuickStashConfig::Settings& settings) {
     return ImVec2(inv.Grid.GridScreenX + kButtonBaseOffsetX + settings.buttonOffsetX,
                   inv.Grid.GridScreenY + kButtonBaseOffsetY + settings.buttonOffsetY);
-}
-
-inline ImVec2 WithdrawButtonPos(const PluginSDK::Inventory& inv,
-                                const QuickStashConfig::Settings& settings) {
-    const ImVec2 t = TransferButtonPos(inv, settings);
-    return ImVec2(t.x + kButtonW + kButtonGap, t.y);
 }
 
 inline ImVec2 TransferButtonMax(const ImVec2& p0) {

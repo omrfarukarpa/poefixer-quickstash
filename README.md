@@ -1,6 +1,6 @@
 # Quick Stash
 
-**Version 1.2.0** — written and maintained by **Ömer Faruk ARPA**.
+**Version 1.3.0** — written and maintained by **Ömer Faruk ARPA**.
 
 A [PoeFixer](https://github.com/POEFixer/PoeFixer) plugin for **Path of Exile 2** with two one-click flows:
 
@@ -13,8 +13,8 @@ A [PoeFixer](https://github.com/POEFixer/PoeFixer) plugin for **Path of Exile 2*
 > a non-blocking, frame-paced click state machine; the TAKE / withdraw flow;
 > reading Path of Exile's native "Highlight Items" box through the UI tree;
 > and extensive crash-hardening and safety work. Written and maintained by
-> Ömer Faruk ARPA. See [Changes in 1.2.0](#changes-in-120),
-> [1.1.1](#changes-in-111), and [1.1.0](#changes-in-110).
+> Ömer Faruk ARPA. See [Changes in 1.3.0](#changes-in-130),
+> [1.2.0](#changes-in-120), [1.1.1](#changes-in-111), and [1.1.0](#changes-in-110).
 
 ## Demo
 
@@ -25,6 +25,7 @@ A [PoeFixer](https://github.com/POEFixer/PoeFixer) plugin for **Path of Exile 2*
 - **Transfer button** — Appears above your backpack grid whenever the main inventory is open.
 - **One-click dump** — Ctrl+clicks every non-excluded occupied slot into the panel on the other side of the trade (stash tab, shop, player trade, etc.).
 - **TAKE (withdraw)** — Ctrl+clicks matching items **out** of the open stash tab and into your inventory. Filtered live by whatever you type in Path of Exile's native **"Highlight Items"** search box — no separate input to manage.
+  - **Matches item mods too (new in 1.3.0)** — the filter also reads each item's mods, so words like `chaos`, `bleeding`, `pack`, `rarity`, or `waystone` match the relevant items, just like the game's own highlight. Toggle off any time with **"Match item mods in filter"**.
   - **Live highlight overlay** draws a box around every item TAKE will grab, so you see the selection before clicking.
   - **`TAKE (N)`** shows the number of Ctrl+clicks (item stacks); for stacked currency it also shows the **total quantity** (e.g. `TAKE (3)  x30` for three stacks of 10).
   - Works on normal grid tabs **and** special/affinity tabs (currency, fragments, …) via automatic per-item / grid coordinate resolution.
@@ -127,6 +128,26 @@ ui/ExclusionGrid.h          12×5 exclusion editor in settings
 ui/InventoryDiagnostics.h   Debug-mode inventory / UI-tree inspectors
 sdk/                        PoeFixer Plugin SDK headers
 ```
+
+## Changes in 1.3.0
+
+Makes the **TAKE** filter match item **mods**, not just names:
+
+- **Mod-aware filtering** — the "Highlight Items" filter now also matches each
+  item's mods. Type `chaos`, `bleeding`, `stun`, `pack`, `rarity`, `waystone`,
+  etc. and the matching items light up — the same behaviour as Path of Exile's
+  own highlight box. On by default; a **"Match item mods in filter"** checkbox
+  turns it off.
+- **Waystone reward stats** — Item Rarity, Monster Pack Size, Monster Rarity,
+  Monster Effectiveness and Waystone Drop Chance are recognised so those words
+  match too (these are "final from map" stats, not plain mod text).
+- **Cleaner name matching** — the filter no longer matches an item's hidden
+  internal path, so a stray letter can't accidentally select a whole tab.
+- **Safe & fast** — mods are read only while you have a filter typed, once per
+  item (cached), behind a liveness check and a per-scan cap; the toggle is a
+  hard off-switch if you ever want it disabled.
+- **TAKE button only shows with a stash open** — no leftover button when the
+  stash is closed.
 
 ## Changes in 1.2.0
 

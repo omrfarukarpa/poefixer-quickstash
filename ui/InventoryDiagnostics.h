@@ -202,6 +202,58 @@ inline void DrawInventoryDiagnostics(const PluginSDK::Context* ctx) {
     }
 }
 
+inline void DrawWithdrawHaystackDump(const PluginSDK::Context* ctx) {
+    if (!ctx) return;
+    if (!ImGui::CollapsingHeader("Diagnostics: withdraw filter haystack (mods)"))
+        return;
+
+    ImGui::TextWrapped(
+        "For the open tab, this is the EXACT text the filter matches against "
+        "(name + mods). If a word you type is not here, it cannot match. This "
+        "reads item mods live - keep it collapsed during normal play.");
+
+    const ImVec2 disp = ImGui::GetIO().DisplaySize;
+    ctx->Inventory.Scan(-1);
+    const auto main = QuickStashGame::FindMainInventory(ctx);
+    const int mainId = main ? main->InventoryId : -1;
+    const auto tab = QuickStashGame::FindOpenStashAny(ctx, mainId, disp.x, disp.y);
+    if (!tab) {
+        ImGui::TextDisabled("(open a stash tab)");
+        return;
+    }
+
+    const ImGuiTableFlags flags = ImGuiTableFlags_Borders
+                                | ImGuiTableFlags_RowBg
+                                | ImGuiTableFlags_SizingStretchProp
+                                | ImGuiTableFlags_ScrollY;
+    if (ImGui::BeginTable("##qs_haystack", 4, flags, ImVec2(0.f, 320.f))) {
+        ImGui::TableSetupColumn("Slot", ImGuiTableColumnFlags_WidthFixed, 52.f);
+        ImGui::TableSetupColumn("BaseType", ImGuiTableColumnFlags_WidthStretch);
+        ImGui::TableSetupColumn("Mod haystack", ImGuiTableColumnFlags_WidthStretch);
+        ImGui::TableSetupColumn("Agg key:val", ImGuiTableColumnFlags_WidthFixed, 200.f);
+        ImGui::TableHeadersRow();
+        int rows = 0;
+        for (const auto& it : tab->Items) {
+            if (rows++ >= 40) break;
+            std::string mods = QuickStashGame::BuildModText(ctx, it);
+            for (auto& ch : mods)
+                if (ch == '\n') ch = ' ';
+            const std::string agg = QuickStashGame::DebugAggregatedPairs(ctx, it);
+            ImGui::TableNextRow();
+            ImGui::TableNextColumn(); ImGui::Text("%d,%d", it.SlotX, it.SlotY);
+            ImGui::TableNextColumn(); ImGui::TextUnformatted(it.BaseTypeName.c_str());
+            ImGui::TableNextColumn();
+            if (mods.empty())
+                ImGui::TextDisabled("(no mods read)");
+            else
+                ImGui::TextWrapped("%s", mods.c_str());
+            ImGui::TableNextColumn();
+            ImGui::TextWrapped("%s", agg.c_str());
+        }
+        ImGui::EndTable();
+    }
+}
+
 inline void DrawUiTreeDiagnostics(const PluginSDK::Context* ctx) {
     if (!ctx) return;
     if (!ImGui::CollapsingHeader("Diagnostics: UI tree text (find PoE's search box)"))
