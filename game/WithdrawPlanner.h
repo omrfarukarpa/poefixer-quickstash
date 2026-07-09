@@ -68,6 +68,7 @@ inline std::string BuildNameSearchText(const PluginSDK::InventoryItem& item) {
     s += item.BaseTypeName;
     s += '\n';
     s += item.UniqueName;
+    if (item.IsCorrupted) s += "\nCorrupted";
     return s;
 }
 

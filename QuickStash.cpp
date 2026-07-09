@@ -21,7 +21,7 @@
 #include <utility>
 #include <vector>
 
-inline constexpr const char* kQuickStashVersion    = "1.3.0";
+inline constexpr const char* kQuickStashVersion    = "1.3.1";
 inline constexpr const char* kQuickStashMaintainer = "Omer Faruk ARPA";
 
 class QuickStashPlugin : public PluginSDK::Plugin {

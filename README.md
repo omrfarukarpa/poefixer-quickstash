@@ -1,6 +1,6 @@
 # Quick Stash
 
-**Version 1.3.0** — written and maintained by **Ömer Faruk ARPA**.
+**Version 1.3.1** — written and maintained by **Ömer Faruk ARPA**.
 
 A [PoeFixer](https://github.com/POEFixer/PoeFixer) plugin for **Path of Exile 2** with two one-click flows:
 
