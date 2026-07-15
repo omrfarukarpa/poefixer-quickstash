@@ -7,6 +7,7 @@
 
 #include <algorithm>
 #include <cctype>
+#include <cstring>
 #include <optional>
 #include <string>
 #include <unordered_map>
@@ -68,7 +69,6 @@ inline std::string BuildNameSearchText(const PluginSDK::InventoryItem& item) {
     s += item.BaseTypeName;
     s += '\n';
     s += item.UniqueName;
-    if (item.IsCorrupted) s += "\nCorrupted";
     return s;
 }
 
@@ -78,6 +78,7 @@ inline std::string BuildModText(const PluginSDK::Context* ctx,
     if (!ctx || !item.Address) return s;
     if (ctx->Inventory.ReadItemBaseTypeName(item.Address).empty()) return s;
     const auto mods = ctx->Inventory.ReadItemMods(item.Address);
+    if (mods.Valid && mods.IsCorrupted) s += "\nCorrupted";
     const std::vector<const std::vector<PluginSDK::Mod>*> groups = {
         &mods.ImplicitMods, &mods.ExplicitMods, &mods.EnchantMods,
         &mods.HellscapeMods, &mods.CrucibleMods};
@@ -182,6 +183,17 @@ inline bool TabOnScreen(const PluginSDK::Inventory& inv,
     return false;
 }
 
+inline bool IsNonStashWindowName(const char* name) {
+    if (!name) return false;
+    static const char* kWindowPrefixes[] = {"Ritual"};
+    for (const char* p : kWindowPrefixes) {
+        size_t n = 0;
+        while (p[n] != '\0') ++n;
+        if (std::strncmp(name, p, n) == 0) return true;
+    }
+    return false;
+}
+
 inline std::optional<PluginSDK::Inventory> FindOpenStashAny(
     const PluginSDK::Context* ctx, int mainInventoryId,
     float displayW, float displayH) {
@@ -193,6 +205,7 @@ inline std::optional<PluginSDK::Inventory> FindOpenStashAny(
         if (inv.InventoryId == mainInventoryId) continue;
         const char* name = ctx->Inventory.GetName(inv.InventoryId);
         if (IsPlayerSlotName(name)) continue;
+        if (IsNonStashWindowName(name)) continue;
         const long long area =
             static_cast<long long>(inv.TotalBoxesX) * inv.TotalBoxesY;
         if (area < 10) continue;

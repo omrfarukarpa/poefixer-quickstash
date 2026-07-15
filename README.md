@@ -1,6 +1,6 @@
 # Quick Stash
 
-**Version 1.3.1** — written and maintained by **Ömer Faruk ARPA**.
+**Version 1.3.2** — written and maintained by **Ömer Faruk ARPA**.
 
 A [PoeFixer](https://github.com/POEFixer/PoeFixer) plugin for **Path of Exile 2** with two one-click flows:
 
@@ -26,6 +26,8 @@ A [PoeFixer](https://github.com/POEFixer/PoeFixer) plugin for **Path of Exile 2*
 - **One-click dump** — Ctrl+clicks every non-excluded occupied slot into the panel on the other side of the trade (stash tab, shop, player trade, etc.).
 - **TAKE (withdraw)** — Ctrl+clicks matching items **out** of the open stash tab and into your inventory. Filtered live by whatever you type in Path of Exile's native **"Highlight Items"** search box — no separate input to manage.
   - **Matches item mods too (new in 1.3.0)** — the filter also reads each item's mods, so words like `chaos`, `bleeding`, `pack`, `rarity`, or `waystone` match the relevant items, just like the game's own highlight. Toggle off any time with **"Match item mods in filter"**.
+  - **`corrupted` matches corrupted items (fixed in 1.3.2)** — corruption is read from the item's mod data, so it needs "Match item mods in filter" on (the default).
+  - **Ritual windows are ignored (1.3.2)** — the Ritual "Favours" window is no longer treated as an open stash, so TAKE and its highlights stay away from tribute items.
   - **Live highlight overlay** draws a box around every item TAKE will grab, so you see the selection before clicking.
   - **`TAKE (N)`** shows the number of Ctrl+clicks (item stacks); for stacked currency it also shows the **total quantity** (e.g. `TAKE (3)  x30` for three stacks of 10).
   - Works on normal grid tabs **and** special/affinity tabs (currency, fragments, …) via automatic per-item / grid coordinate resolution.

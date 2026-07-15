@@ -21,7 +21,7 @@
 #include <utility>
 #include <vector>
 
-inline constexpr const char* kQuickStashVersion    = "1.3.1";
+inline constexpr const char* kQuickStashVersion    = "1.3.2";
 inline constexpr const char* kQuickStashMaintainer = "Omer Faruk ARPA";
 
 class QuickStashPlugin : public PluginSDK::Plugin {
@@ -45,6 +45,7 @@ public:
             ImGui::SetCurrentContext(static_cast<ImGuiContext*>(ctx()->ImGuiContext));
 
         m_settings.Load(DirectoryPath());
+        m_loaded = true;
         m_lastScan = std::chrono::steady_clock::now();
 
         auto& events = const_cast<PluginSDK::EventsService&>(ctx()->Events);
@@ -67,8 +68,8 @@ public:
     }
 
     void DrawSettings() override {
-        if (ctx()->ImGuiContext)
-            ImGui::SetCurrentContext(static_cast<ImGuiContext*>(ctx()->ImGuiContext));
+        if (!ctx()->ImGuiContext) return;  // incompatible host: our GImGui is null -> ImGui calls would deref null
+        ImGui::SetCurrentContext(static_cast<ImGuiContext*>(ctx()->ImGuiContext));
 
         ImGui::TextDisabled("Quick Stash v%s  -  by %s",
                             kQuickStashVersion, kQuickStashMaintainer);
@@ -126,8 +127,8 @@ public:
         ImGui::Checkbox("Match item mods in filter", &m_settings.readMods);
         ImGui::TextDisabled(
             "When on, the filter also matches an item's mods (e.g. 'waystone', "
-            "'rarity'), like PoE's own highlight. Turn off if reading item data "
-            "ever causes a crash.");
+            "'rarity') and 'corrupted', like PoE's own highlight. Turn off if "
+            "reading item data ever causes a crash.");
 
         ImGui::Separator();
         ImGui::Checkbox("Debug mode (inventory / UI tree inspectors)", &m_settings.debugMode);
@@ -145,6 +146,7 @@ public:
             ImGui::SetCurrentContext(static_cast<ImGuiContext*>(ctx()->ImGuiContext));
 
         if (!ctx()->Game.GetSnapshot().GameWindowForeground) {
+            ResetClickTrackers();
             m_overlayCapturePending = false;
             ctx()->Overlay.SetWantsOverlayInput(false);
             return;
@@ -153,6 +155,7 @@ public:
         RefreshInventoryIfNeeded();
 
         if (m_transfer.IsRunning()) {
+            ResetClickTrackers();
             m_overlayCapturePending = false;
             ctx()->Overlay.SetWantsOverlayInput(false);
             QuickStashOverlay::DrawTransferProgress(
@@ -164,6 +167,7 @@ public:
         // m_backpack is refreshed by RefreshInventoryIfNeeded(); a valid grid
         // here means the inventory is open. No extra IsInventoryOpen() scan.
         if (!m_backpack || !m_backpack->Grid.Valid) {
+            ResetClickTrackers();
             m_overlayCapturePending = false;
             ctx()->Overlay.SetWantsOverlayInput(false);
             return;
@@ -202,14 +206,11 @@ public:
         bool transferActivated = QuickStashOverlay::TransferButtonActivated(tbtn);
         bool withdrawActivated = showWithdraw && QuickStashOverlay::TransferButtonActivated(wbtn);
 
+        const bool hwTransfer = m_transferClick.Update(true, tbtn.btnP0, tbtn.btnP1);
+        const bool hwWithdraw = m_withdrawClick.Update(showWithdraw, wbtn.btnP0, wbtn.btnP1);
         if (!transferActivated && !withdrawActivated) {
-            if (mouseOverTransfer || tbtn.hovered) {
-                if (QuickStashOverlay::Win32LeftClickOnRect(tbtn.btnP0, tbtn.btnP1))
-                    transferActivated = true;
-            } else if (showWithdraw && (mouseOverWithdraw || wbtn.hovered)) {
-                if (QuickStashOverlay::Win32LeftClickOnRect(wbtn.btnP0, wbtn.btnP1))
-                    withdrawActivated = true;
-            }
+            if (hwTransfer)      transferActivated = true;
+            else if (hwWithdraw) withdrawActivated = true;
         }
 
         if (transferActivated) {
@@ -232,6 +233,8 @@ public:
         pts.reserve(m_withdrawTargets.size());
         for (const auto& r : m_withdrawTargets)
             pts.push_back(QuickStashGame::RectCenter(r));
+        m_stashMissStreak = 0;
+        m_lastStashCheck = std::chrono::steady_clock::now();
         m_transfer.StartWithdraw(ctx(), m_settings, std::move(pts));
     }
 
@@ -258,6 +261,17 @@ public:
             return;
         }
         m_stashOpen = true;
+        // Only match/highlight when PoE's "Highlight Items" box was actually
+        // located. Without this, a missing anchor reads as an empty filter and
+        // an empty filter matches EVERYTHING - painting the whole tab and (if the
+        // box were present) letting one TAKE withdraw/buy the entire tab.
+        if (!m_poeFound) {
+            m_candidates.clear();
+            m_withdrawTargets.clear();
+            m_withdrawCount = 0;
+            m_withdrawQty = 0;
+            return;
+        }
         const bool needMods = m_settings.readMods && !filter.empty();
         m_candidates = QuickStashGame::CollectCandidates(
             ctx(), *stash, disp.x, disp.y, &m_modCache, needMods);
@@ -265,6 +279,18 @@ public:
         m_withdrawTargets = std::move(sel.rects);
         m_withdrawCount = static_cast<int>(m_withdrawTargets.size());
         m_withdrawQty = sel.totalQty;
+    }
+
+    // The HardwareClick trackers must see every frame to keep their press/release
+    // edge state fresh. On DrawUI early-returns (foreground lost, transfer
+    // running, no backpack) Update() stops running; reset the trackers so a stale
+    // press captured before the gap can't fire a phantom activation when the
+    // button reappears. If the mouse button is currently held, seed wasDown=true
+    // so the in-progress hold is never attributed to the button.
+    void ResetClickTrackers() {
+        const bool down = (GetAsyncKeyState(VK_LBUTTON) & 0x8000) != 0;
+        m_transferClick = {}; m_transferClick.wasDown = down;
+        m_withdrawClick = {}; m_withdrawClick.wasDown = down;
     }
 
     void DrawWithdrawHighlights() {
@@ -278,10 +304,15 @@ public:
         }
     }
 
-    void SaveSettings() override { m_settings.Save(DirectoryPath()); }
+    void SaveSettings() override {
+        if (m_loaded) m_settings.Save(DirectoryPath());
+    }
 
 private:
     QuickStashConfig::Settings m_settings;
+    bool m_loaded = false;
+    QuickStashOverlay::HardwareClick m_transferClick;
+    QuickStashOverlay::HardwareClick m_withdrawClick;
     QuickStashGame::TransferState m_transfer;
     PluginSDK::EventsService::Token m_frameToken{};
     std::optional<PluginSDK::Inventory> m_backpack;
@@ -299,6 +330,8 @@ private:
     std::vector<QuickStashGame::ScreenRect> m_withdrawTargets;
     std::vector<QuickStashGame::WithdrawCandidate> m_candidates;
     QuickStashGame::ModTextCache m_modCache;
+    std::chrono::steady_clock::time_point m_lastStashCheck{};
+    int m_stashMissStreak = 0;
 
     // Refresh the cached backpack snapshot at most every 150 ms. During a
     // transfer this also keeps m_backpack's grid current so TransferState can
@@ -328,6 +361,30 @@ private:
                 return;
             }
             RefreshInventoryIfNeeded();
+            // Withdraw clicks target FIXED screen points captured from the stash
+            // when TAKE was pressed. If that stash closes mid-run (a missed click
+            // walked the character, etc.) the remaining Ctrl+clicks would land in
+            // the game world. verifyPanelsOpen only checks the backpack, so guard
+            // the source stash here too. A short miss streak avoids a false abort
+            // on a single-frame detection blip.
+            if (m_settings.verifyPanelsOpen && m_transfer.IsWithdrawMode()) {
+                const auto now = std::chrono::steady_clock::now();
+                if (std::chrono::duration_cast<std::chrono::milliseconds>(
+                        now - m_lastStashCheck).count() >= 150) {
+                    m_lastStashCheck = now;
+                    const int mainId = m_backpack ? m_backpack->InventoryId : -1;
+                    const PluginSDK::ScreenSize disp = ctx()->Game.GetScreenSize();
+                    const bool stashOpen = QuickStashGame::FindOpenStashAny(
+                        ctx(), mainId, disp.Width, disp.Height).has_value();
+                    m_stashMissStreak = stashOpen ? 0 : (m_stashMissStreak + 1);
+                    if (m_stashMissStreak >= 2) {
+                        ctx()->Log.Info("Quick Stash: cancelled (stash closed)");
+                        m_transfer.Abort();
+                        m_stashMissStreak = 0;
+                        return;
+                    }
+                }
+            }
             m_transfer.Tick(ctx(), m_backpack ? &*m_backpack : nullptr);
             return;
         }

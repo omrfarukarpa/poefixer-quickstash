@@ -38,26 +38,30 @@ inline bool HitRect(const ImVec2& p, ImVec2 p0, ImVec2 p1) {
 // Fires on the RELEASE edge only: a single real click is one press + one
 // release, and returning true on both edges (pressed || released) double-fired
 // the activation. Release-only also avoids triggering while the button is held.
-inline bool Win32LeftClickOnRect(ImVec2 p0, ImVec2 p1) {
-    static bool wasDown = false;
-    const bool down = (GetAsyncKeyState(VK_LBUTTON) & 0x8000) != 0;
+// One tracker instance per button; Update must run every frame the button
+// exists so the press/release edge state never goes stale.
+struct HardwareClick {
+    bool wasDown = false;
+    bool pressedOnRect = false;
 
-    POINT pt{};
-    const bool haveCursor = GetCursorPos(&pt) != 0;
-    const ImVec2 mouse(static_cast<float>(pt.x), static_cast<float>(pt.y));
-    const bool overRect = haveCursor && HitRect(mouse, p0, p1);
+    bool Update(bool rectActive, ImVec2 p0, ImVec2 p1) {
+        const bool down = (GetAsyncKeyState(VK_LBUTTON) & 0x8000) != 0;
 
-    // Only count a release as a click if the press began over the button.
-    static bool pressedOnRect = false;
-    if (down && !wasDown)
-        pressedOnRect = overRect;       // press edge: remember where it started
-    const bool released = !down && wasDown;
-    const bool clicked = released && pressedOnRect && overRect;
-    if (released)
-        pressedOnRect = false;
-    wasDown = down;
-    return clicked;
-}
+        POINT pt{};
+        const bool haveCursor = GetCursorPos(&pt) != 0;
+        const ImVec2 mouse(static_cast<float>(pt.x), static_cast<float>(pt.y));
+        const bool overRect = rectActive && haveCursor && HitRect(mouse, p0, p1);
+
+        if (down && !wasDown)
+            pressedOnRect = overRect;   // press edge: remember where it started
+        const bool released = !down && wasDown;
+        const bool clicked = released && pressedOnRect && overRect;
+        if (released)
+            pressedOnRect = false;
+        wasDown = down;
+        return clicked;
+    }
+};
 
 inline ImVec2 TransferButtonPos(const PluginSDK::Inventory& inv,
                                 const QuickStashConfig::Settings& settings) {
@@ -110,12 +114,14 @@ inline TransferButtonResult DrawOverlayButton(const ImVec2& pos,
 
     r.beginOk = ImGui::Begin(windowId, nullptr, flags);
     if (r.beginOk) {
-        r.clicked = ImGui::Button(label, size);
+        r.clicked = ImGui::Button(label, size);  // ImGui's own click already requires press+release on the button
         r.hovered = ImGui::IsItemHovered();
         r.held = ImGui::IsItemActive();
-        if (!r.clicked && r.hovered
-            && ImGui::IsMouseReleased(ImGuiMouseButton_Left))
-            r.clickedRelease = true;
+        // No release-only fallback here: it fired on any release-while-hovered
+        // even when the press began off the button (e.g. a drag from the stash
+        // panel just above). The hardware-edge tracker (HardwareClick, with a
+        // press-origin check) covers the case where the game eats the click and
+        // ImGui never sees it.
     }
     ImGui::End();
 

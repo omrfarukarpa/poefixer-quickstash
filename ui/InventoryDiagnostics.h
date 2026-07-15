@@ -226,9 +226,10 @@ inline void DrawWithdrawHaystackDump(const PluginSDK::Context* ctx) {
                                 | ImGuiTableFlags_RowBg
                                 | ImGuiTableFlags_SizingStretchProp
                                 | ImGuiTableFlags_ScrollY;
-    if (ImGui::BeginTable("##qs_haystack", 4, flags, ImVec2(0.f, 320.f))) {
+    if (ImGui::BeginTable("##qs_haystack", 5, flags, ImVec2(0.f, 320.f))) {
         ImGui::TableSetupColumn("Slot", ImGuiTableColumnFlags_WidthFixed, 52.f);
         ImGui::TableSetupColumn("BaseType", ImGuiTableColumnFlags_WidthStretch);
+        ImGui::TableSetupColumn("Corr(i/m)", ImGuiTableColumnFlags_WidthFixed, 70.f);
         ImGui::TableSetupColumn("Mod haystack", ImGuiTableColumnFlags_WidthStretch);
         ImGui::TableSetupColumn("Agg key:val", ImGuiTableColumnFlags_WidthFixed, 200.f);
         ImGui::TableHeadersRow();
@@ -239,9 +240,16 @@ inline void DrawWithdrawHaystackDump(const PluginSDK::Context* ctx) {
             for (auto& ch : mods)
                 if (ch == '\n') ch = ' ';
             const std::string agg = QuickStashGame::DebugAggregatedPairs(ctx, it);
+            const bool modCorrupt =
+                (it.Address
+                 && !ctx->Inventory.ReadItemBaseTypeName(it.Address).empty())
+                    ? ctx->Inventory.ReadItemMods(it.Address).IsCorrupted
+                    : false;
             ImGui::TableNextRow();
             ImGui::TableNextColumn(); ImGui::Text("%d,%d", it.SlotX, it.SlotY);
             ImGui::TableNextColumn(); ImGui::TextUnformatted(it.BaseTypeName.c_str());
+            ImGui::TableNextColumn();
+            ImGui::Text("%d/%d", it.IsCorrupted ? 1 : 0, modCorrupt ? 1 : 0);
             ImGui::TableNextColumn();
             if (mods.empty())
                 ImGui::TextDisabled("(no mods read)");
