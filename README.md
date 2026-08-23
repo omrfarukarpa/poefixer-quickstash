@@ -32,6 +32,7 @@ A [PoeFixer](https://github.com/POEFixer/PoeFixer) plugin for **Path of Exile 2*
   - **`TAKE (N)`** shows the number of Ctrl+clicks (item stacks); for stacked currency it also shows the **total quantity** (e.g. `TAKE (3)  x30` for three stacks of 10).
   - Works on normal grid tabs **and** special/affinity tabs (currency, fragments, …) via automatic per-item / grid coordinate resolution.
   - **Never targets your own bag, equipment, or charm slots.**
+- **Guild stash support (new in 1.4.0)** — the open **Guild Stash** tab is a first-class storage target: Transfer dumps into it, TAKE withdraws from it, and the button reads **`TAKE G(N)`** so you always know you're pulling from the shared guild chest, not your own tab. Requires a PoeFixer build that publishes the guild tab (inventory id `10002` / `GuildStash1`); on older builds guild behaviour is simply absent.
 - **Exclusion grid** — Click cells in settings to skip slots (weapon column excluded by default). Presets: weapon column only, clear all, select all.
 - **Timing controls** — Click delay, post-click delay, cursor settle, and hold Ctrl after the last click for reliable transfers.
 - **Safety options** — Cancel on right-click; stop if inventory closes mid-transfer.
@@ -130,6 +131,15 @@ ui/ExclusionGrid.h          12×5 exclusion editor in settings
 ui/InventoryDiagnostics.h   Debug-mode inventory / UI-tree inspectors
 sdk/                        PoeFixer Plugin SDK headers
 ```
+
+## Changes in 1.4.0
+
+Adds **Guild Stash** support, backed by a matching PoeFixer host update:
+
+- The host now publishes the currently open **Guild Stash tab** as its own inventory (`PSDK_INVENTORY_ID_GUILD_STASH` = `10002`, name `GuildStash1`) — the guild tab does not exist in the game's player-inventory list, so older hosts could not expose it at all.
+- **TAKE** works on the guild stash and labels itself **`TAKE G(N)`** there, so the guild chest is never mistaken for a personal tab.
+- `FindOpenStash` / `FindOpenStashAny` accept the guild inventory explicitly (not by accident of name filtering), and the debug inspector tags it `[GUILD]`.
+- Vendored SDK headers synced (SDK v6, append-only — `PluginSDK::IsGuildStashInventory()` helpers).
 
 ## Changes in 1.3.0
 
