@@ -44,12 +44,17 @@ inline void MoveCursorScreen(int x, int y) {
 // by its borders/title bar (23 px on the machine this was diagnosed on,
 // 2026-08-23), which pushed every synthetic click that far above its target:
 // top-row guild-stash clicks landed on the TAB STRIP and switched tabs, and
-// the top-left backpack item's click missed the grid entirely. Identity
-// fallback when the window handle is unavailable keeps the old behaviour.
-inline void ClientToScreenPoint(HWND gameWnd, int& x, int& y) {
-    if (!gameWnd || !IsWindow(gameWnd)) return;
+// the top-left backpack item's click missed the grid entirely.
+// Returns false (coordinates untouched) when the window is gone — the caller
+// must NOT click then: an identity fallback would re-create the mis-aim, into
+// whatever now owns those screen pixels.
+inline bool ClientToScreenPoint(HWND gameWnd, int& x, int& y) {
+    if (!gameWnd || !IsWindow(gameWnd)) return false;
     POINT pt{ x, y };
-    if (ClientToScreen(gameWnd, &pt)) { x = pt.x; y = pt.y; }
+    if (!ClientToScreen(gameWnd, &pt)) return false;
+    x = pt.x;
+    y = pt.y;
+    return true;
 }
 
 // Current cursor position in screen pixels. Returns false if unavailable

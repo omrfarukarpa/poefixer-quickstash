@@ -38,17 +38,6 @@ extern "C" {
 // version differs.
 #define PLUGIN_SDK_VERSION 6
 
-// Host-synthesized inventory id (NOT a game inventory id): the CURRENTLY OPEN
-// Guild Stash tab. The guild tab inventory does not exist in the game's
-// player-inventory list, so the host publishes it under this reserved id; the
-// InventoryService name for it is "GuildStash1". Only the SELECTED guild tab is
-// materialized by the game, so one id covers the whole guild stash — switching
-// tabs republishes it with the new tab's grid/items, and closing the panel
-// removes it from enumerate/get_all. Use this id (or the "GuildStash" name
-// prefix) to tell guild storage apart from the player's own stash tabs.
-// Data-level contract only — no ABI change (added 2026-08-23, SDK stays v6).
-#define PSDK_INVENTORY_ID_GUILD_STASH 10002
-
 // Coarse entity classification (EntityInfoAbi::entity_type).
 typedef enum {
     PSDK_ENTITY_TYPE_UNIDENTIFIED      = 0,
@@ -415,17 +404,6 @@ typedef struct {
     uintptr_t active_skills_dat_addr;
     uintptr_t granted_effect_stat_sets_per_level_addr;
     uintptr_t skill_details_addr;
-    // Skill-bar placement (append 2026-07-09; ActiveSkillAbi is visitor-delivered
-    // via const*, so tail growth is safe for plugins built against the older
-    // layout). skill_slot_index = 0-based position on the visible main skill bar,
-    // or -1 when the skill is not a directly-socketed skill on that bar (a
-    // command/linked sub-skill, support, ascendancy, or movement skill).
-    // is_on_skill_bar = (skill_slot_index != -1). For each bar slot i, the unique
-    // skill with is_on_skill_bar && skill_slot_index == i is the icon drawn there.
-    // Decoded host-side from equipment_info_packed (see
-    // game_client/components/SkillBarDecode.h).
-    int32_t  skill_slot_index;
-    int32_t  is_on_skill_bar;
 } ActiveSkillAbi;
 
 // One active buff/debuff (enumerate_buffs). name_addr is host-owned.
@@ -688,19 +666,9 @@ typedef int32_t (*PsdkEntityVisitorFn)(const EntityInfoAbi* e,
 typedef int32_t (*PsdkInventoryVisitorFn)(const InventoryAbi* inv, void* userdata);
 typedef int32_t (*PsdkInventoryItemVisitorFn)(const InventoryItemAbi* item, void* userdata);
 typedef int32_t (*PsdkModVisitorFn)(const ModAbi* mod, PsdkModKind mod_kind, void* userdata);
-
-// One rendered area/map modifier line (HostAbi::enumerate_area_mods). `text` is
-// a host-owned UTF-8 string valid only during the callback — copy it to keep it.
-typedef int32_t (*PsdkAreaModVisitorFn)(uint32_t stat_row_index, int32_t value,
-                                        const char* text, void* userdata);
 typedef int32_t (*PsdkBuffVisitorFn)(const BuffAbi* buff, void* userdata);
 typedef int32_t (*PsdkActiveSkillVisitorFn)(const ActiveSkillAbi* s, void* userdata);
 typedef int32_t (*PsdkStatVisitorFn)(int32_t key, int32_t value, PsdkStatSource source_kind, void* userdata);
-// Per-skill evaluated stat visitor (enumerate_skill_stats). set_index groups
-// pairs into the stat sets the skill was evaluated with (0-based, in emission
-// order); stat_id = Stats.dat ROW INDEX + 1 (the game's runtime stat key —
-// same +1 bias as atlas content tokens), ascending within one set.
-typedef int32_t (*PsdkSkillStatVisitorFn)(int32_t set_index, int32_t stat_id, int32_t value, void* userdata);
 typedef int32_t (*PsdkTgtVisitorFn)(const TgtLocationAbi* loc, void* userdata);
 typedef int32_t (*PsdkFlaskVisitorFn)(const FlaskAbi* item, void* userdata);
 typedef int32_t (*PsdkCharmVisitorFn)(const CharmAbi* item, void* userdata);
@@ -1258,36 +1226,12 @@ typedef struct HostAbi {
 
     // Trial of the Sekhemas floor-map data (room graph / choices / content FK
     // rows) + StateMachine flag reads, read host-side via the GameLibrary
-    // SekhemaTrial offsets. Embedded by-value: FROZEN since
-    // enumerate_skill_stats was appended after it — extensions must land as
-    // new HostAbi tail functions. Append-only tail (2026-07-07, after atlas).
+    // SekhemaTrial offsets. Embedded by-value: appending inside
+    // SekhemaServiceAbi is safe ONLY while it is the LAST HostAbi member; the
+    // moment anything is appended after it, the struct is frozen and extensions
+    // must land as new HostAbi tail functions. Append-only tail (2026-07-07,
+    // after atlas).
     SekhemaServiceAbi sekhema;
-
-    // Evaluated per-skill stat sets. skill_details_addr is the
-    // ActiveSkillAbi::skill_details_addr of a skill enumerated THIS frame
-    // (addresses go stale across frames/area changes; a stale address safely
-    // yields no visits). Emits sorted {stat_id, value} pairs grouped by
-    // set_index. Set 0 is the skill's CURRENT-CONTEXT stat set — present on
-    // every skill, persistent, and the source of the in-game skills-panel DPS
-    // line; subsequent sets are the per-part stat sets (summon/command skills
-    // keep their minion stats there). stat_id = Stats.dat row index + 1;
-    // values are raw int32, many x100 fixed-point (runtime ids: 691 aps*100,
-    // 692 dps*100, 695 cps*100, 1982/1983 avg dmg*100, 694 base cast time ms,
-    // 2079 show-average-instead-of-dps flag). The DPS family is computed for
-    // displayed contexts; alt contexts (infusion tabs, weapon swap) are
-    // transient — absence means "not evaluated", not zero. Works for ANY
-    // actor's skills, including minions. Append-only tail (2026-07-09).
-    void (*enumerate_skill_stats)(uintptr_t skill_details_addr,
-                                  PsdkSkillStatVisitorFn cb, void* userdata);
-
-    // Area/map modifiers — the rendered area-info panel lines (map mods). Host
-    // reads the AreaInstance stat containers (A@+0x138 final values ∩ B@+0x158
-    // membership) and renders each via the generated Stats.dat/.csd template
-    // table (GameLibrary MapModTemplates). Visitor delivers one display line per
-    // call, in panel order; `text` is valid only for the duration of the call.
-    // Empty outside a map. stat_row_index = Stats.dat row index; value is the raw
-    // final stat value. Append-only tail (2026-07-18, after enumerate_skill_stats).
-    void (*enumerate_area_mods)(PsdkAreaModVisitorFn cb, void* userdata);
 } HostAbi;
 
 #ifdef __cplusplus

@@ -207,14 +207,18 @@ inline std::optional<PluginSDK::Inventory> FindOpenStashAny(
         // (PSDK_INVENTORY_ID_GUILD_STASH, name "GuildStash1") — a first-class
         // TAKE source, accepted explicitly rather than by luck of the name
         // filters below. Everything else must pass the filters.
-        if (!PluginSDK::IsGuildStashInventory(inv)) {
+        if (!IsGuildStashInventory(inv)) {
             const char* name = ctx->Inventory.GetName(inv.InventoryId);
             if (IsPlayerSlotName(name)) continue;
             if (IsNonStashWindowName(name)) continue;
         }
+        // Size heuristic guards against tiny non-storage grids slipping past
+        // the NAME filters — the guild inventory is identified by reserved id,
+        // not by name luck, so it must not be dropped when a guild special tab
+        // reports a small grid.
         const long long area =
             static_cast<long long>(inv.TotalBoxesX) * inv.TotalBoxesY;
-        if (area < 10) continue;
+        if (area < 10 && !IsGuildStashInventory(inv)) continue;
         if (inv.Items.empty()) continue;
         if (!TabOnScreen(inv, displayW, displayH)) continue;
         if (!best || inv.Items.size() > best->Items.size())

@@ -140,8 +140,11 @@ public:
     }
 
     void DrawUI() override {
-        if (!m_settings.enabled) return;
-        if (!ctx()->Game.IsInGame()) return;
+        // Every early-return that stops the frame's Update() calls must reset
+        // the hardware-click trackers, or a press latched before the gap is
+        // attributed to the button when it reappears.
+        if (!m_settings.enabled) { ResetClickTrackers(); return; }
+        if (!ctx()->Game.IsInGame()) { ResetClickTrackers(); return; }
         if (ctx()->ImGuiContext)
             ImGui::SetCurrentContext(static_cast<ImGuiContext*>(ctx()->ImGuiContext));
 
@@ -207,8 +210,16 @@ public:
         bool transferActivated = QuickStashOverlay::TransferButtonActivated(tbtn);
         bool withdrawActivated = showWithdraw && QuickStashOverlay::TransferButtonActivated(wbtn);
 
-        const bool hwTransfer = m_transferClick.Update(true, tbtn.btnP0, tbtn.btnP1);
-        const bool hwWithdraw = m_withdrawClick.Update(showWithdraw, wbtn.btnP0, wbtn.btnP1);
+        // The hardware fallback exists for overlay mode, where the game can eat
+        // a click before ImGui sees it while the host still feeds io.MousePos
+        // every frame. In the host's windowed (non-overlay) mode ImGui receives
+        // clicks natively AND io.MousePos freezes while the game holds focus —
+        // trusting the fallback there would let a stale on-button position turn
+        // any physical click anywhere into a phantom activation.
+        const bool hwTrusted = ctx()->Game.IsOverlayMode();
+        const bool hwTransfer = m_transferClick.Update(hwTrusted, tbtn.btnP0, tbtn.btnP1);
+        const bool hwWithdraw = m_withdrawClick.Update(hwTrusted && showWithdraw,
+                                                       wbtn.btnP0, wbtn.btnP1);
         if (!transferActivated && !withdrawActivated) {
             if (hwTransfer)      transferActivated = true;
             else if (hwWithdraw) withdrawActivated = true;
@@ -266,7 +277,7 @@ public:
         // Guild separation: the host publishes the open GUILD stash tab as its
         // own synthesized inventory, distinct from every personal tab. Track it
         // so the TAKE button says which storage it pulls from.
-        m_stashIsGuild = PluginSDK::IsGuildStashInventory(*stash);
+        m_stashIsGuild = QuickStashGame::IsGuildStashInventory(*stash);
         // Only match/highlight when PoE's "Highlight Items" box was actually
         // located. Without this, a missing anchor reads as an empty filter and
         // an empty filter matches EVERYTHING - painting the whole tab and (if the

@@ -599,13 +599,6 @@ struct ActiveSkill {
     uintptr_t GrantedEffectStatSetsPerLevelAddr = 0;
     uintptr_t SkillDetailsAddr = 0;
 
-    // Visible-bar placement (host-decoded). SkillSlotIndex = 0-based bar slot, or
-    // -1 when the skill is not a directly-socketed skill on the main bar. For each
-    // slot i, the unique skill with IsOnSkillBar && SkillSlotIndex == i is the
-    // icon drawn there (e.g. to overlay its DPS). 0 if the host predates this field.
-    int  SkillSlotIndex = -1;
-    bool IsOnSkillBar   = false;
-
     struct EquipmentInfo {
         uint32_t  GemNameHash = 0;
         int       InventorySlot = 0;
@@ -632,8 +625,6 @@ struct ActiveSkill {
         s.ActiveSkillsDatAddr              = a.active_skills_dat_addr;
         s.GrantedEffectStatSetsPerLevelAddr = a.granted_effect_stat_sets_per_level_addr;
         s.SkillDetailsAddr                 = a.skill_details_addr;
-        s.SkillSlotIndex                   = a.skill_slot_index;
-        s.IsOnSkillBar                     = a.is_on_skill_bar != 0;
 
         uint32_t packed = a.equipment_info_packed;
         s.Equipment.GemNameHash   = packed >> 0x10;
@@ -1032,18 +1023,6 @@ struct Inventory {
     }
 };
 
-// The host-synthesized "currently open Guild Stash tab" inventory (see
-// PSDK_INVENTORY_ID_GUILD_STASH in PluginAbi.h). Present in GetAll()/Get()
-// only while the Guild Stash panel is open; its name is "GuildStash1". Use
-// these to separate guild storage from the player's own stash tabs before
-// depositing/withdrawing.
-inline bool IsGuildStashInventoryId(int inventoryId) {
-    return inventoryId == PSDK_INVENTORY_ID_GUILD_STASH;
-}
-inline bool IsGuildStashInventory(const Inventory& inv) {
-    return IsGuildStashInventoryId(inv.InventoryId);
-}
-
 // Per-entity component addresses (0 = absent). Pass a non-zero member to the
 // matching ComponentsService::Read* call; HasX() are convenience checks.
 struct ComponentAddresses {
@@ -1282,16 +1261,6 @@ public:
         return raw.area_change_counter;
     }
 
-    // Cheap town/hideout flag WITHOUT the per-entity enumeration that GetSnapshot()
-    // does in Snapshot::FromAbi (same pattern as GetAreaChangeCounter — the raw ABI
-    // fill copies only scalars + player/maps/vitals). Use it to gate map-content
-    // overlays every frame. false when not in game.
-    bool IsTownOrHideout() const {
-        SnapshotAbi raw{};
-        if (m_abi && m_abi->get_snapshot) m_abi->get_snapshot(&raw);
-        return raw.vitals.is_town_or_hideout != 0;
-    }
-
     GameState GetState() const {
         return static_cast<GameState>(
             (m_abi && m_abi->get_state) ? m_abi->get_state() : PSDK_GAME_STATE_NOT_LOADED);
@@ -1346,25 +1315,6 @@ public:
     // plugins (same asymmetry as GetGold / GetAreaId).
     bool GetHiveblood(int32_t& out) const {
         return m_host && m_host->get_hiveblood && m_host->get_hiveblood(&out) != 0;
-    }
-
-    // One rendered area/map modifier line.
-    struct AreaMod { uint32_t statRowIndex = 0; int32_t value = 0; std::string text; };
-
-    // Area/map modifiers — the rendered area-info panel lines ("27% increased
-    // Rarity of Items found in this Area"), in panel order. Empty outside a map
-    // or on a host that predates the tail function. Routed via the HostAbi
-    // top-level pointer (append-only tail; not a GameServiceAbi member).
-    std::vector<AreaMod> GetAreaMods() const {
-        std::vector<AreaMod> out;
-        if (!m_host || !m_host->enumerate_area_mods) return out;
-        m_host->enumerate_area_mods(
-            [](uint32_t rid, int32_t val, const char* text, void* ud) -> int32_t {
-                auto* v = static_cast<std::vector<AreaMod>*>(ud);
-                v->push_back({ rid, val, text ? std::string(text) : std::string() });
-                return 1;
-            }, &out);
-        return out;
     }
 };
 
@@ -1650,39 +1600,6 @@ public:
                 return 1;
             },
             &c);
-        return out;
-    }
-
-    // One evaluated skill stat (EnumerateSkillStats). StatId is the Stats.dat
-    // ROW INDEX + 1 (the game's runtime stat key — 0 is the "no stat"
-    // sentinel), ascending within a set. Values are raw int32; many are x100
-    // fixed-point. Useful runtime ids: 691 = attacks/s*100, 692 = DPS*100,
-    // 695 = casts/s*100, 1982/1983 = avg damage per hit/use *100, 694 = base
-    // cast time ms, 2079 = "shows average damage instead of DPS" flag.
-    struct SkillStatEntry {
-        int SetIndex = 0;   // groups pairs into the skill's stat sets (emission order)
-        int StatId   = 0;
-        int Value    = 0;
-    };
-
-    // Evaluated per-skill stat sets for ONE active skill. Pass
-    // ActiveSkill::SkillDetailsAddr from an EnumerateActiveSkills result of the
-    // SAME frame (skill addresses go stale across frames/area changes; a stale
-    // address safely returns empty). Works for any actor's skills — including
-    // minions, whose combat blocks carry real aps/dps values. NOTE: the
-    // DPS-family stats are VIRTUAL (engine compute callbacks) — they appear
-    // only where the game itself evaluated them (the character-sheet-selected
-    // skill, minion combat stats); absence means "not evaluated", not zero.
-    // Returns empty if the host predates this API (HostAbi tail; null-checked).
-    std::vector<SkillStatEntry> EnumerateSkillStats(uintptr_t skillDetailsAddr) const {
-        std::vector<SkillStatEntry> out;
-        if (!m_host || !m_host->enumerate_skill_stats) return out;
-        m_host->enumerate_skill_stats(skillDetailsAddr,
-            [](int32_t set, int32_t id, int32_t value, void* ud) -> int32_t {
-                static_cast<std::vector<SkillStatEntry>*>(ud)->push_back({ set, id, value });
-                return 1;
-            },
-            &out);
         return out;
     }
 
