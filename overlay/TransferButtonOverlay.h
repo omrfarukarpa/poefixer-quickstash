@@ -138,9 +138,14 @@ inline TransferButtonResult DrawTransferButton(const PluginSDK::Inventory& inv,
                              "##quick_stash_transfer");
 }
 
-inline TransferButtonResult DrawWithdrawButtonAt(const ImVec2& pos, int count) {
+inline TransferButtonResult DrawWithdrawButtonAt(const ImVec2& pos, int count,
+                                                 bool guildSource = false) {
+    // "TAKE G(n)" when the open stash is the GUILD stash (the host publishes it
+    // as a separate synthesized inventory — see PSDK_INVENTORY_ID_GUILD_STASH),
+    // so the user always knows whether TAKE pulls from their own tab or the
+    // shared guild one.
     char label[32];
-    snprintf(label, sizeof(label), "TAKE (%d)", count);
+    snprintf(label, sizeof(label), guildSource ? "TAKE G(%d)" : "TAKE (%d)", count);
     return DrawOverlayButton(pos, label, "##quick_stash_withdraw");
 }
 

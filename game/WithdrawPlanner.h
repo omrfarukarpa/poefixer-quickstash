@@ -203,9 +203,15 @@ inline std::optional<PluginSDK::Inventory> FindOpenStashAny(
     const PluginSDK::Inventory* best = nullptr;
     for (const auto& inv : all) {
         if (inv.InventoryId == mainInventoryId) continue;
-        const char* name = ctx->Inventory.GetName(inv.InventoryId);
-        if (IsPlayerSlotName(name)) continue;
-        if (IsNonStashWindowName(name)) continue;
+        // The open GUILD stash tab is a synthesized host inventory
+        // (PSDK_INVENTORY_ID_GUILD_STASH, name "GuildStash1") — a first-class
+        // TAKE source, accepted explicitly rather than by luck of the name
+        // filters below. Everything else must pass the filters.
+        if (!PluginSDK::IsGuildStashInventory(inv)) {
+            const char* name = ctx->Inventory.GetName(inv.InventoryId);
+            if (IsPlayerSlotName(name)) continue;
+            if (IsNonStashWindowName(name)) continue;
+        }
         const long long area =
             static_cast<long long>(inv.TotalBoxesX) * inv.TotalBoxesY;
         if (area < 10) continue;
