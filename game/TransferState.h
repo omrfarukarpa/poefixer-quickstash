@@ -16,6 +16,12 @@ namespace QuickStashGame {
 // registers the last Ctrl+click even at aggressive timing settings.
 inline constexpr int kMinCompletionHoldMs = 60;
 
+// Minimum time between CtrlDown and the FIRST click. The game samples key
+// state per frame; a click issued in the same instant as CtrlDown can be
+// processed as a PLAIN click — which picks the item up onto the cursor
+// instead of transferring it.
+inline constexpr int kCtrlSettleMs = 50;
+
 class TransferState {
 public:
     bool IsRunning() const { return m_running || m_finishing; }
@@ -44,9 +50,11 @@ public:
         m_phase = ClickPhase::Spacing;
         m_running = !m_queue.empty();
         m_startedAt = std::chrono::steady_clock::now();
-        // Backdate so the first click's Spacing gate passes immediately rather
-        // than waiting one clickDelayMs after the user pressed Transfer.
-        m_lastClick = m_startedAt - std::chrono::milliseconds(m_settings.clickDelayMs);
+        // Backdate so the first click's Spacing gate passes after only
+        // kCtrlSettleMs (not a full clickDelayMs) — quick to start, but never
+        // in the same instant as the CtrlDown below.
+        m_lastClick = m_startedAt - std::chrono::milliseconds(m_settings.clickDelayMs)
+                                  + std::chrono::milliseconds(kCtrlSettleMs);
 
         if (!m_running) {
             // Nothing to do (everything excluded or inventory empty). Tell the
@@ -54,6 +62,7 @@ public:
             ctx->Log.Info("Quick Stash: nothing to transfer (no eligible items)");
             return;
         }
+        m_gameWnd = ctx->Game.GetGameWindow();
 
         // Remember where the cursor was so we can put it back when done.
         m_haveSavedCursor = QuickStashInput::GetCursorScreen(m_savedCursorX, m_savedCursorY);
@@ -78,12 +87,14 @@ public:
         m_phase = ClickPhase::Spacing;
         m_running = !m_screenQueue.empty();
         m_startedAt = std::chrono::steady_clock::now();
-        m_lastClick = m_startedAt - std::chrono::milliseconds(m_settings.clickDelayMs);
+        m_lastClick = m_startedAt - std::chrono::milliseconds(m_settings.clickDelayMs)
+                                  + std::chrono::milliseconds(kCtrlSettleMs);
 
         if (!m_running) {
             ctx->Log.Info("Quick Stash: nothing to withdraw (no matching on-screen items)");
             return;
         }
+        m_gameWnd = ctx->Game.GetGameWindow();
 
         m_haveSavedCursor = QuickStashInput::GetCursorScreen(m_savedCursorX, m_savedCursorY);
 
@@ -176,6 +187,11 @@ public:
                     clickX = static_cast<int>(SlotCenterX(*live, target.slotX) + 0.5f);
                     clickY = static_cast<int>(SlotCenterY(*live, target.slotY) + 0.5f);
                 }
+                // Both queues carry game-CLIENT coordinates (grid math and item
+                // rects alike) — convert to SCREEN pixels at the single click
+                // emission point. See ClientToScreenPoint for why this matters
+                // on windowed clients.
+                QuickStashInput::ClientToScreenPoint(m_gameWnd, clickX, clickY);
                 QuickStashInput::MoveCursorScreen(clickX, clickY);
                 m_phaseSince = now;
                 m_phase = ClickPhase::Settling;
@@ -266,6 +282,7 @@ private:
     int  m_index = 0;
     int  m_savedCursorX = 0;
     int  m_savedCursorY = 0;
+    HWND m_gameWnd = nullptr;   // client->screen conversion target for clicks
     ClickPhase m_phase = ClickPhase::Spacing;
     QuickStashConfig::Settings m_settings{};
     std::vector<ClickTarget> m_queue;

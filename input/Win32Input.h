@@ -37,6 +37,21 @@ inline void MoveCursorScreen(int x, int y) {
     SendInput(1, &in, sizeof(INPUT));
 }
 
+// Game-CLIENT pixel -> SCREEN pixel, in place. The host publishes every grid
+// and item coordinate in the game window's CLIENT space; SendInput needs
+// screen pixels. The two coincide only when the client area sits at the
+// screen origin (borderless fullscreen at 0,0) — a windowed client is offset
+// by its borders/title bar (23 px on the machine this was diagnosed on,
+// 2026-08-23), which pushed every synthetic click that far above its target:
+// top-row guild-stash clicks landed on the TAB STRIP and switched tabs, and
+// the top-left backpack item's click missed the grid entirely. Identity
+// fallback when the window handle is unavailable keeps the old behaviour.
+inline void ClientToScreenPoint(HWND gameWnd, int& x, int& y) {
+    if (!gameWnd || !IsWindow(gameWnd)) return;
+    POINT pt{ x, y };
+    if (ClientToScreen(gameWnd, &pt)) { x = pt.x; y = pt.y; }
+}
+
 // Current cursor position in screen pixels. Returns false if unavailable
 // (so the caller can skip a later restore rather than warp to {0,0}).
 inline bool GetCursorScreen(int& x, int& y) {

@@ -47,10 +47,16 @@ struct HardwareClick {
     bool Update(bool rectActive, ImVec2 p0, ImVec2 p1) {
         const bool down = (GetAsyncKeyState(VK_LBUTTON) & 0x8000) != 0;
 
-        POINT pt{};
-        const bool haveCursor = GetCursorPos(&pt) != 0;
-        const ImVec2 mouse(static_cast<float>(pt.x), static_cast<float>(pt.y));
-        const bool overRect = rectActive && haveCursor && HitRect(mouse, p0, p1);
+        // io.MousePos is in the SAME coordinate space the button rect was drawn
+        // in, and the host keeps feeding it even while the overlay is
+        // click-through. GetCursorPos SCREEN pixels are NOT that space: with a
+        // windowed game the overlay's client origin sits below the screen
+        // origin (title bar), so the old screen-vs-client compare displaced the
+        // accept zone by that offset — the "click lands only N px off the
+        // button" bug (live-diagnosed 2026-08-23, 23 px on a windowed client).
+        const ImVec2 mouse = ImGui::GetIO().MousePos;
+        const bool mouseValid = mouse.x > -1.0e9f && mouse.y > -1.0e9f;  // -FLT_MAX = "no mouse"
+        const bool overRect = rectActive && mouseValid && HitRect(mouse, p0, p1);
 
         if (down && !wasDown)
             pressedOnRect = overRect;   // press edge: remember where it started
