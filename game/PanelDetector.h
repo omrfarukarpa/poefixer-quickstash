@@ -9,6 +9,23 @@
 
 namespace QuickStashGame {
 
+// The PoeFixer host publishes the currently open GUILD STASH tab as a
+// synthesized inventory under this reserved id (host contract 2026-08-23:
+// PSDK_INVENTORY_ID_GUILD_STASH in the host SDK; name "GuildStash1"). The
+// guild tab does not exist in the game's player-inventory list, so hosts
+// without the publisher simply never emit the id — guild support degrades to
+// absent, and nothing else in the plugin changes. Defined locally instead of
+// syncing the vendored sdk/ headers: a header sync would grow sizeof(HostAbi)
+// and the attach gate would then hard-disable the WHOLE plugin on hosts that
+// run 1.3.2 fine today.
+inline constexpr int kGuildStashInventoryId = 10002;
+
+// ONE definition of "this inventory is the guild stash" — the TAKE label, the
+// storage finders, and the diagnostics must never disagree on it.
+inline bool IsGuildStashInventory(const PluginSDK::Inventory& inv) {
+    return inv.InventoryId == kGuildStashInventoryId;
+}
+
 inline std::optional<PluginSDK::Inventory> FindMainInventory(
     const PluginSDK::Context* ctx) {
     if (!ctx) return std::nullopt;
@@ -105,8 +122,13 @@ inline std::optional<PluginSDK::Inventory> FindOpenStash(
     const PluginSDK::Inventory* best = nullptr;
     for (const auto& inv : all) {
         if (inv.InventoryId == mainInventoryId) continue;
-        const char* name = ctx->Inventory.GetName(inv.InventoryId);
-        if (IsPlayerSlotName(name)) continue;
+        // The open GUILD stash tab (synthesized host inventory, see
+        // PSDK_INVENTORY_ID_GUILD_STASH) is a valid storage target; only
+        // non-guild inventories go through the player-slot name filter.
+        if (!IsGuildStashInventory(inv)) {
+            const char* name = ctx->Inventory.GetName(inv.InventoryId);
+            if (IsPlayerSlotName(name)) continue;
+        }
         if (!GridOnScreen(inv, displayW, displayH)) continue;
 
         if (!best) { best = &inv; continue; }

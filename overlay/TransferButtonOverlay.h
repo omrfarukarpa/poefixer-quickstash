@@ -47,10 +47,19 @@ struct HardwareClick {
     bool Update(bool rectActive, ImVec2 p0, ImVec2 p1) {
         const bool down = (GetAsyncKeyState(VK_LBUTTON) & 0x8000) != 0;
 
-        POINT pt{};
-        const bool haveCursor = GetCursorPos(&pt) != 0;
-        const ImVec2 mouse(static_cast<float>(pt.x), static_cast<float>(pt.y));
-        const bool overRect = rectActive && haveCursor && HitRect(mouse, p0, p1);
+        // io.MousePos is in the SAME coordinate space the button rect was drawn
+        // in, and in overlay mode the host keeps feeding it every frame even
+        // while the overlay is click-through. GetCursorPos SCREEN pixels are
+        // NOT that space: with a windowed game the overlay's client origin
+        // sits below the screen origin (title bar), so the old screen-vs-client
+        // compare displaced the accept zone by that offset — the "click lands
+        // only N px off the button" bug (live-diagnosed 2026-08-23, 23 px on a
+        // windowed client). Callers must pass rectActive=false when io.MousePos
+        // is not live-fed (non-overlay host mode) — a frozen on-button position
+        // would turn ANY physical click anywhere into an activation.
+        const ImVec2 mouse = ImGui::GetIO().MousePos;
+        const bool overRect = rectActive && ImGui::IsMousePosValid()
+                              && HitRect(mouse, p0, p1);
 
         if (down && !wasDown)
             pressedOnRect = overRect;   // press edge: remember where it started
@@ -138,9 +147,14 @@ inline TransferButtonResult DrawTransferButton(const PluginSDK::Inventory& inv,
                              "##quick_stash_transfer");
 }
 
-inline TransferButtonResult DrawWithdrawButtonAt(const ImVec2& pos, int count) {
+inline TransferButtonResult DrawWithdrawButtonAt(const ImVec2& pos, int count,
+                                                 bool guildSource) {
+    // "TAKE G(n)" when the open stash is the GUILD stash (the host publishes it
+    // as a separate synthesized inventory — see PSDK_INVENTORY_ID_GUILD_STASH),
+    // so the user always knows whether TAKE pulls from their own tab or the
+    // shared guild one.
     char label[32];
-    snprintf(label, sizeof(label), "TAKE (%d)", count);
+    snprintf(label, sizeof(label), guildSource ? "TAKE G(%d)" : "TAKE (%d)", count);
     return DrawOverlayButton(pos, label, "##quick_stash_withdraw");
 }
 

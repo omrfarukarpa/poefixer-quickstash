@@ -54,9 +54,11 @@ inline void DrawInventoryDiagnostics(const PluginSDK::Context* ctx) {
         QuickStashGame::FindOpenStash(ctx, mainId, disp.x, disp.y);
     if (openStash) {
         const char* name = ctx->Inventory.GetName(openStash->InventoryId);
+        const bool guild = QuickStashGame::IsGuildStashInventory(*openStash);
         ImGui::TextColored(ImVec4(0.4f, 0.85f, 0.4f, 1.f),
-            "GRID-detected open stash: id %d (%s), %d items",
+            "GRID-detected open stash: id %d (%s)%s, %d items",
             openStash->InventoryId, name ? name : "",
+            guild ? " [GUILD]" : "",
             static_cast<int>(openStash->Items.size()));
         ImGui::TextDisabled("  grid=(%.0f,%.0f) cell=%.1f boxes=%dx%d",
             openStash->Grid.GridScreenX, openStash->Grid.GridScreenY,
