@@ -8,13 +8,14 @@
 
 #include <algorithm>
 #include <chrono>
+#include <cstdio>
 #include <vector>
 
 namespace QuickStashGame {
 
-// Minimum time Ctrl stays held after the final click, so the game always
-// registers the last Ctrl+click even at aggressive timing settings.
 inline constexpr int kMinCompletionHoldMs = 60;
+
+inline constexpr int kCtrlSettleMs = 50;
 
 class TransferState {
 public:
@@ -23,9 +24,6 @@ public:
     int  ProgressTotal() const { return ActiveQueueSize(); }
     bool IsWithdrawMode() const { return m_useScreenPoints; }
 
-    // Release Ctrl no matter how the object dies (e.g. host destroys the
-    // plugin without calling OnDisable). Without this, a leaked CtrlUp leaves
-    // VK_CONTROL latched DOWN system-wide.
     ~TransferState() {
         if (m_ctrlHeld)
             QuickStashInput::CtrlUp();
@@ -34,63 +32,24 @@ public:
     void Start(const PluginSDK::Context* ctx, const QuickStashConfig::Settings& settings,
                const PluginSDK::Inventory& inv) {
         if (!ctx || m_running || m_finishing) return;
-        m_settings = settings;
         m_useScreenPoints = false;
         m_screenQueue.clear();
         m_queue = BuildClickQueue(inv, settings);
-        m_index = 0;
-        m_ctrlHeld = false;
-        m_finishing = false;
-        m_phase = ClickPhase::Spacing;
-        m_running = !m_queue.empty();
-        m_startedAt = std::chrono::steady_clock::now();
-        // Backdate so the first click's Spacing gate passes immediately rather
-        // than waiting one clickDelayMs after the user pressed Transfer.
-        m_lastClick = m_startedAt - std::chrono::milliseconds(m_settings.clickDelayMs);
-
-        if (!m_running) {
-            // Nothing to do (everything excluded or inventory empty). Tell the
-            // user instead of silently no-op'ing the button press.
-            ctx->Log.Info("Quick Stash: nothing to transfer (no eligible items)");
-            return;
-        }
-
-        // Remember where the cursor was so we can put it back when done.
-        m_haveSavedCursor = QuickStashInput::GetCursorScreen(m_savedCursorX, m_savedCursorY);
-
-        QuickStashInput::CtrlDown();
-        m_ctrlHeld = true;
-        ctx->Log.Info(("Quick Stash: transferring " + std::to_string(m_queue.size())
-                       + " items").c_str());
+        BeginRun(ctx, settings,
+                 "Quick Stash: nothing to transfer (no eligible items)",
+                 "Quick Stash: transferring");
     }
 
     void StartWithdraw(const PluginSDK::Context* ctx,
                        const QuickStashConfig::Settings& settings,
                        std::vector<ScreenPoint> points) {
         if (!ctx || m_running || m_finishing) return;
-        m_settings = settings;
         m_useScreenPoints = true;
         m_screenQueue = std::move(points);
         m_queue.clear();
-        m_index = 0;
-        m_ctrlHeld = false;
-        m_finishing = false;
-        m_phase = ClickPhase::Spacing;
-        m_running = !m_screenQueue.empty();
-        m_startedAt = std::chrono::steady_clock::now();
-        m_lastClick = m_startedAt - std::chrono::milliseconds(m_settings.clickDelayMs);
-
-        if (!m_running) {
-            ctx->Log.Info("Quick Stash: nothing to withdraw (no matching on-screen items)");
-            return;
-        }
-
-        m_haveSavedCursor = QuickStashInput::GetCursorScreen(m_savedCursorX, m_savedCursorY);
-
-        QuickStashInput::CtrlDown();
-        m_ctrlHeld = true;
-        ctx->Log.Info(("Quick Stash: withdrawing " + std::to_string(m_screenQueue.size())
-                       + " items").c_str());
+        BeginRun(ctx, settings,
+                 "Quick Stash: nothing to withdraw (no matching on-screen items)",
+                 "Quick Stash: withdrawing");
     }
 
     void Abort() {
@@ -98,7 +57,7 @@ public:
             QuickStashInput::CtrlUp();
             m_ctrlHeld = false;
         }
-        // Restore the cursor to where the user left it before the transfer.
+
         if (m_haveSavedCursor) {
             QuickStashInput::MoveCursorScreen(m_savedCursorX, m_savedCursorY);
             m_haveSavedCursor = false;
@@ -112,9 +71,6 @@ public:
         m_index = 0;
     }
 
-    // `live` is the caller's current cached main-inventory snapshot (may be
-    // null if the inventory just closed). Passing it in lets Tick reuse the
-    // host scan the caller already did instead of re-enumerating every frame.
     void Tick(const PluginSDK::Context* ctx, const PluginSDK::Inventory* live) {
         if (!ctx) return;
 
@@ -124,10 +80,6 @@ public:
         }
         if (!m_running) return;
 
-        // Watchdog: a transfer should never run far longer than the worst-case
-        // time its own queue + timings imply. If it does (host stalled the
-        // frame loop, an item refuses to move, something wedged a phase), force
-        // an abort so Ctrl is released rather than held indefinitely.
         if (Elapsed(std::chrono::steady_clock::now(), m_startedAt) > WatchdogBudgetMs()) {
             ctx->Log.Warn("Quick Stash: aborted (watchdog timeout)");
             Abort();
@@ -149,15 +101,9 @@ public:
 
         const auto now = std::chrono::steady_clock::now();
 
-        // Per-click sub-state machine. Each Tick does at most ONE non-blocking
-        // action and returns immediately — no Sleep on the render thread. The
-        // real-world delays the SetCursorPos/SendInput sequence needs are now
-        // realised as steady_clock deadlines between frames, the same way
-        // BeginFinishing/m_finishAt already works.
         switch (m_phase) {
             case ClickPhase::Spacing: {
-                // Inter-click spacing: wait clickDelayMs since the previous
-                // click completed before starting the next one.
+
                 if (Elapsed(now, m_lastClick) < m_settings.clickDelayMs)
                     return;
                 if (m_index >= ActiveQueueSize()) {
@@ -176,13 +122,19 @@ public:
                     clickX = static_cast<int>(SlotCenterX(*live, target.slotX) + 0.5f);
                     clickY = static_cast<int>(SlotCenterY(*live, target.slotY) + 0.5f);
                 }
+
+                if (!QuickStashInput::ClientToScreenPoint(m_gameWnd, clickX, clickY)) {
+                    ctx->Log.Warn("Quick Stash: game window lost — aborting");
+                    Abort();
+                    return;
+                }
                 QuickStashInput::MoveCursorScreen(clickX, clickY);
                 m_phaseSince = now;
                 m_phase = ClickPhase::Settling;
                 return;
             }
             case ClickPhase::Settling: {
-                // Let the cursor settle at the slot before clicking.
+
                 if (Elapsed(now, m_phaseSince) < m_settings.cursorSettleMs)
                     return;
                 QuickStashInput::LeftClickAtCursor();
@@ -191,11 +143,11 @@ public:
                 return;
             }
             case ClickPhase::PostClick: {
-                // Hold after the click so the game registers the Ctrl+click.
+
                 if (Elapsed(now, m_phaseSince) < m_settings.postClickDelayMs)
                     return;
                 ++m_index;
-                m_lastClick = now;          // spacing is measured from here
+                m_lastClick = now;
                 m_phase = ClickPhase::Spacing;
                 if (m_index >= ActiveQueueSize())
                     BeginFinishing(now);
@@ -205,11 +157,49 @@ public:
     }
 
 private:
-    // Sub-state within a single click, advanced one step per Tick.
+
+    void BeginRun(const PluginSDK::Context* ctx,
+                  const QuickStashConfig::Settings& settings,
+                  const char* emptyMsg, const char* startVerb) {
+        m_settings = settings;
+        m_index = 0;
+        m_ctrlHeld = false;
+        m_finishing = false;
+        m_phase = ClickPhase::Spacing;
+        m_running = ActiveQueueSize() > 0;
+        m_startedAt = std::chrono::steady_clock::now();
+
+        if (!m_running) {
+
+            ctx->Log.Info(emptyMsg);
+            return;
+        }
+
+        m_gameWnd = ctx->Game.GetGameWindow();
+        if (!m_gameWnd || !IsWindow(m_gameWnd)) {
+            ctx->Log.Warn("Quick Stash: game window unavailable — not starting");
+            m_running = false;
+            m_queue.clear();
+            m_screenQueue.clear();
+            return;
+        }
+
+        m_haveSavedCursor = QuickStashInput::GetCursorScreen(m_savedCursorX, m_savedCursorY);
+
+        QuickStashInput::CtrlDown();
+        m_ctrlHeld = true;
+        m_lastClick = std::chrono::steady_clock::now()
+                      - std::chrono::milliseconds(m_settings.clickDelayMs)
+                      + std::chrono::milliseconds(kCtrlSettleMs);
+        char msg[64];
+        snprintf(msg, sizeof(msg), "%s %d items", startVerb, ActiveQueueSize());
+        ctx->Log.Info(msg);
+    }
+
     enum class ClickPhase {
-        Spacing,    // waiting clickDelayMs before moving to the next slot
-        Settling,   // cursor moved; waiting cursorSettleMs before clicking
-        PostClick,  // clicked; waiting postClickDelayMs before advancing
+        Spacing,
+        Settling,
+        PostClick,
     };
 
     static long long Elapsed(std::chrono::steady_clock::time_point now,
@@ -222,9 +212,6 @@ private:
                                                    : m_queue.size());
     }
 
-    // Generous upper bound on how long the whole transfer may take: the sum of
-    // per-click worst-case timings, tripled for frame-pacing/jitter slack, plus
-    // a flat floor. Past this we assume something wedged and bail.
     long long WatchdogBudgetMs() const {
         const long long perClick = static_cast<long long>(m_settings.clickDelayMs)
                                   + m_settings.cursorSettleMs
@@ -236,14 +223,11 @@ private:
     void BeginFinishing(std::chrono::steady_clock::time_point from) {
         m_running = false;
         m_finishing = true;
-        // Keep Ctrl held briefly after the last click so the game registers the
-        // final Ctrl+click before we release. Enforce a floor (at least the
-        // post-click delay, and never below kMinCompletionHoldMs) so a tiny or
-        // zero completionHoldMs can't release Ctrl before the last click lands.
+
         int hold = m_settings.completionHoldMs > 0
                        ? m_settings.completionHoldMs
                        : m_settings.postClickDelayMs + m_settings.clickDelayMs;
-        // Parenthesized to dodge the <Windows.h> max() macro (no NOMINMAX here).
+
         const int floor = (m_settings.postClickDelayMs > kMinCompletionHoldMs)
                               ? m_settings.postClickDelayMs : kMinCompletionHoldMs;
         if (hold < floor)
@@ -266,6 +250,7 @@ private:
     int  m_index = 0;
     int  m_savedCursorX = 0;
     int  m_savedCursorY = 0;
+    HWND m_gameWnd = nullptr;
     ClickPhase m_phase = ClickPhase::Spacing;
     QuickStashConfig::Settings m_settings{};
     std::vector<ClickTarget> m_queue;
@@ -276,4 +261,4 @@ private:
     std::chrono::steady_clock::time_point m_finishAt{};
 };
 
-} // namespace QuickStashGame
+}

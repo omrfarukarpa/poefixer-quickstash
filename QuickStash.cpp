@@ -1,6 +1,3 @@
-// Quick Stash — PoeFixer plugin (SDK v6)
-// Ctrl+click transfer from main inventory when the backpack is open.
-
 #include "sdk/PluginSDK.h"
 
 #include "config/Settings.h"
@@ -21,7 +18,7 @@
 #include <utility>
 #include <vector>
 
-inline constexpr const char* kQuickStashVersion    = "1.3.2";
+inline constexpr const char* kQuickStashVersion    = "1.4.0";
 inline constexpr const char* kQuickStashMaintainer = "Omer Faruk ARPA";
 
 class QuickStashPlugin : public PluginSDK::Plugin {
@@ -30,11 +27,8 @@ public:
 
     bool WantsOverlay() const override { return m_settings.enabled; }
 
-    void OnEnable(bool /*isGameAttached*/) override {
-        // If the host ABI version/size didn't match at attach time, m_ctx is
-        // unpopulated (all service pointers null). Refuse to run rather than
-        // silently no-op with no diagnostic. Log is safe even here — the SDK
-        // wrappers null-check their function pointers.
+    void OnEnable(bool                   ) override {
+
         if (!HostCompatible()) {
             ctx()->Log.Error(
                 "Quick Stash: incompatible PoeFixer host (SDK version/size mismatch) — disabled");
@@ -68,15 +62,13 @@ public:
     }
 
     void DrawSettings() override {
-        if (!ctx()->ImGuiContext) return;  // incompatible host: our GImGui is null -> ImGui calls would deref null
+        if (!ctx()->ImGuiContext) return;
         ImGui::SetCurrentContext(static_cast<ImGuiContext*>(ctx()->ImGuiContext));
 
         ImGui::TextDisabled("Quick Stash v%s  -  by %s",
                             kQuickStashVersion, kQuickStashMaintainer);
         ImGui::Checkbox("Enable Quick Stash", &m_settings.enabled);
 
-        // How-to: collapsed by default so it doesn't crowd the settings, but
-        // there for anyone who needs it.
         if (ImGui::CollapsingHeader("How to use")) {
             ImGui::TextWrapped(
                 "Quick Stash dumps your backpack into whatever storage panel you "
@@ -140,12 +132,13 @@ public:
     }
 
     void DrawUI() override {
-        if (!m_settings.enabled) return;
-        if (!ctx()->Game.IsInGame()) return;
+
+        if (!m_settings.enabled) { ResetClickTrackers(); return; }
+        if (!ctx()->Game.IsInGame()) { ResetClickTrackers(); return; }
         if (ctx()->ImGuiContext)
             ImGui::SetCurrentContext(static_cast<ImGuiContext*>(ctx()->ImGuiContext));
 
-        if (!ctx()->Game.GetSnapshot().GameWindowForeground) {
+        if (!ctx()->Game.IsForeground()) {
             ResetClickTrackers();
             m_overlayCapturePending = false;
             ctx()->Overlay.SetWantsOverlayInput(false);
@@ -164,8 +157,6 @@ public:
             return;
         }
 
-        // m_backpack is refreshed by RefreshInventoryIfNeeded(); a valid grid
-        // here means the inventory is open. No extra IsInventoryOpen() scan.
         if (!m_backpack || !m_backpack->Grid.Valid) {
             ResetClickTrackers();
             m_overlayCapturePending = false;
@@ -193,7 +184,8 @@ public:
 
         QuickStashOverlay::TransferButtonResult wbtn;
         if (showWithdraw) {
-            wbtn = QuickStashOverlay::DrawWithdrawButtonAt(takePos, m_withdrawCount);
+            wbtn = QuickStashOverlay::DrawWithdrawButtonAt(takePos, m_withdrawCount,
+                                                           m_stashIsGuild);
             if (m_withdrawCount > 0 && m_withdrawQty != m_withdrawCount) {
                 char q[24];
                 snprintf(q, sizeof(q), "x%d", m_withdrawQty);
@@ -206,8 +198,10 @@ public:
         bool transferActivated = QuickStashOverlay::TransferButtonActivated(tbtn);
         bool withdrawActivated = showWithdraw && QuickStashOverlay::TransferButtonActivated(wbtn);
 
-        const bool hwTransfer = m_transferClick.Update(true, tbtn.btnP0, tbtn.btnP1);
-        const bool hwWithdraw = m_withdrawClick.Update(showWithdraw, wbtn.btnP0, wbtn.btnP1);
+        const bool hwTrusted = ctx()->Game.IsOverlayMode();
+        const bool hwTransfer = m_transferClick.Update(hwTrusted, tbtn.btnP0, tbtn.btnP1);
+        const bool hwWithdraw = m_withdrawClick.Update(hwTrusted && showWithdraw,
+                                                       wbtn.btnP0, wbtn.btnP1);
         if (!transferActivated && !withdrawActivated) {
             if (hwTransfer)      transferActivated = true;
             else if (hwWithdraw) withdrawActivated = true;
@@ -258,13 +252,13 @@ public:
             m_withdrawTargets.clear();
             m_withdrawCount = 0;
             m_stashOpen = false;
+            m_stashIsGuild = false;
             return;
         }
         m_stashOpen = true;
-        // Only match/highlight when PoE's "Highlight Items" box was actually
-        // located. Without this, a missing anchor reads as an empty filter and
-        // an empty filter matches EVERYTHING - painting the whole tab and (if the
-        // box were present) letting one TAKE withdraw/buy the entire tab.
+
+        m_stashIsGuild = QuickStashGame::IsGuildStashInventory(*stash);
+
         if (!m_poeFound) {
             m_candidates.clear();
             m_withdrawTargets.clear();
@@ -281,12 +275,6 @@ public:
         m_withdrawQty = sel.totalQty;
     }
 
-    // The HardwareClick trackers must see every frame to keep their press/release
-    // edge state fresh. On DrawUI early-returns (foreground lost, transfer
-    // running, no backpack) Update() stops running; reset the trackers so a stale
-    // press captured before the gap can't fire a phantom activation when the
-    // button reappears. If the mouse button is currently held, seed wasDown=true
-    // so the in-progress hold is never attributed to the button.
     void ResetClickTrackers() {
         const bool down = (GetAsyncKeyState(VK_LBUTTON) & 0x8000) != 0;
         m_transferClick = {}; m_transferClick.wasDown = down;
@@ -322,6 +310,7 @@ private:
     int m_withdrawCount = 0;
     int m_withdrawQty = 0;
     bool m_stashOpen = false;
+    bool m_stashIsGuild = false;
     std::string m_poeFilter;
     bool m_poeFound = false;
     float m_poeX = 0.f;
@@ -333,10 +322,6 @@ private:
     std::chrono::steady_clock::time_point m_lastStashCheck{};
     int m_stashMissStreak = 0;
 
-    // Refresh the cached backpack snapshot at most every 150 ms. During a
-    // transfer this also keeps m_backpack's grid current so TransferState can
-    // recompute click coordinates from the live grid (handles a panel that
-    // moves/scrolls mid-transfer).
     void RefreshInventoryIfNeeded() {
         const auto now = std::chrono::steady_clock::now();
         if (std::chrono::duration_cast<std::chrono::milliseconds>(now - m_lastScan).count() < 150)
@@ -351,22 +336,13 @@ private:
             m_overlayCapturePending = false;
             m_overlayCaptureApplied = false;
             ctx()->Overlay.SetWantsOverlayInput(false);
-            // If the game loses foreground mid-transfer, abort instead of
-            // continuing to inject clicks (which would land in another window)
-            // and, critically, leaving Ctrl held down system-wide. Abort()
-            // releases Ctrl. Without this, alt-tabbing during a transfer keeps
-            // SetCursorPos/SendInput firing with Ctrl stuck on.
-            if (!ctx()->Game.GetSnapshot().GameWindowForeground) {
+
+            if (!ctx()->Game.IsForeground()) {
                 m_transfer.Abort();
                 return;
             }
             RefreshInventoryIfNeeded();
-            // Withdraw clicks target FIXED screen points captured from the stash
-            // when TAKE was pressed. If that stash closes mid-run (a missed click
-            // walked the character, etc.) the remaining Ctrl+clicks would land in
-            // the game world. verifyPanelsOpen only checks the backpack, so guard
-            // the source stash here too. A short miss streak avoids a false abort
-            // on a single-frame detection blip.
+
             if (m_settings.verifyPanelsOpen && m_transfer.IsWithdrawMode()) {
                 const auto now = std::chrono::steady_clock::now();
                 if (std::chrono::duration_cast<std::chrono::milliseconds>(
@@ -396,7 +372,7 @@ private:
             return;
         }
 
-        if (!ctx()->Game.GetSnapshot().GameWindowForeground) {
+        if (!ctx()->Game.IsForeground()) {
             m_overlayCapturePending = false;
             m_overlayCaptureApplied = false;
             ctx()->Overlay.SetWantsOverlayInput(false);

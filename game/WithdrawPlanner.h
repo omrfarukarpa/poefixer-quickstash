@@ -203,12 +203,16 @@ inline std::optional<PluginSDK::Inventory> FindOpenStashAny(
     const PluginSDK::Inventory* best = nullptr;
     for (const auto& inv : all) {
         if (inv.InventoryId == mainInventoryId) continue;
-        const char* name = ctx->Inventory.GetName(inv.InventoryId);
-        if (IsPlayerSlotName(name)) continue;
-        if (IsNonStashWindowName(name)) continue;
+
+        if (!IsGuildStashInventory(inv)) {
+            const char* name = ctx->Inventory.GetName(inv.InventoryId);
+            if (IsPlayerSlotName(name)) continue;
+            if (IsNonStashWindowName(name)) continue;
+        }
+
         const long long area =
             static_cast<long long>(inv.TotalBoxesX) * inv.TotalBoxesY;
-        if (area < 10) continue;
+        if (area < 10 && !IsGuildStashInventory(inv)) continue;
         if (inv.Items.empty()) continue;
         if (!TabOnScreen(inv, displayW, displayH)) continue;
         if (!best || inv.Items.size() > best->Items.size())
@@ -270,4 +274,4 @@ inline WithdrawSelection FilterCandidates(
     return sel;
 }
 
-} // namespace QuickStashGame
+}

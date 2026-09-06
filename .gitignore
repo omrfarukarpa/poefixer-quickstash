@@ -5,3 +5,6 @@ obj/
 docs/poe2stash.gif
 CLAUDE.md
 AGENTS.md
+.Codex/
+TESTING.md
+docs/

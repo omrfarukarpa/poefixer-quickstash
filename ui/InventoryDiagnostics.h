@@ -9,23 +9,6 @@
 
 namespace QuickStashUi {
 
-// Read-only inventory inspector shown in the settings panel. Its purpose is to
-// discover, on a live game, how the currently-open storage panel (stash tab,
-// vendor, trade, gamble, ...) appears in InventoryService::GetAll() — and to
-// validate which detection path lets the withdraw feature target it.
-//
-// TWO detection paths are surfaced side by side because they behave DIFFERENTLY
-// per tab type (learned in-game 2026-07-08):
-//   * ITEM-centric  — per-item ScreenX/Y + ScreenValid. Works for special
-//     affinity tabs (currency/fragment/...) whose items each carry a real
-//     screen rect, but is EMPTY for normal grid tabs (Valid=0, XY 0,0).
-//   * GRID-centric  — Grid.GridScreenX/Y + CellSize + item SlotX/Y, the SAME
-//     math the working Transfer feature uses (see TransferPlanner::SlotCenter*).
-//     This is expected to work for normal grid tabs even when per-item rects are
-//     absent, and is the primary candidate for driving withdraw.
-//
-// GetAll() materializes every item (and its strings) per call, which is heavy
-// for wide special tabs, so it only runs while this header is expanded.
 inline void DrawInventoryDiagnostics(const PluginSDK::Context* ctx) {
     if (!ctx) return;
     if (!ImGui::CollapsingHeader("Diagnostics: inventory inspector"))
@@ -38,7 +21,6 @@ inline void DrawInventoryDiagnostics(const PluginSDK::Context* ctx) {
     ImGui::Text("Display: %.0f x %.0f", disp.x, disp.y);
     ImGui::Spacing();
 
-    // Rescan so a freshly-opened panel shows up without waiting on the main loop.
     ctx->Inventory.Scan(-1);
     const auto all = ctx->Inventory.GetAll();
     ImGui::Text("Inventories enumerated: %d", static_cast<int>(all.size()));
@@ -46,17 +28,15 @@ inline void DrawInventoryDiagnostics(const PluginSDK::Context* ctx) {
     const auto main = QuickStashGame::FindMainInventory(ctx);
     const int mainId = main ? main->InventoryId : -1;
 
-    // --- GRID-centric detection (primary withdraw candidate) -------------
-    // FindOpenStash keeps a valid, on-screen grid that is neither the backpack
-    // nor an equipment slot. If it finds a tab, withdraw can click every item
-    // via SlotCenterX/Y just like Transfer does — no per-item rect required.
     const auto openStash =
         QuickStashGame::FindOpenStash(ctx, mainId, disp.x, disp.y);
     if (openStash) {
         const char* name = ctx->Inventory.GetName(openStash->InventoryId);
+        const bool guild = QuickStashGame::IsGuildStashInventory(*openStash);
         ImGui::TextColored(ImVec4(0.4f, 0.85f, 0.4f, 1.f),
-            "GRID-detected open stash: id %d (%s), %d items",
+            "GRID-detected open stash: id %d (%s)%s, %d items",
             openStash->InventoryId, name ? name : "",
+            guild ? " [GUILD]" : "",
             static_cast<int>(openStash->Items.size()));
         ImGui::TextDisabled("  grid=(%.0f,%.0f) cell=%.1f boxes=%dx%d",
             openStash->Grid.GridScreenX, openStash->Grid.GridScreenY,
@@ -76,9 +56,8 @@ inline void DrawInventoryDiagnostics(const PluginSDK::Context* ctx) {
     }
     ImGui::Spacing();
 
-    // --- ITEM-centric detection (works for special affinity tabs) --------
-    int totalOnScreen = 0;          // withdrawable items (all non-player invs)
-    int invsWithOnScreen = 0;       // how many inventories contribute them
+    int totalOnScreen = 0;
+    int invsWithOnScreen = 0;
     for (const auto& inv : all) {
         if (inv.InventoryId == mainId) continue;
         const char* name = ctx->Inventory.GetName(inv.InventoryId);
@@ -92,13 +71,6 @@ inline void DrawInventoryDiagnostics(const PluginSDK::Context* ctx) {
                         totalOnScreen, invsWithOnScreen);
     ImGui::Spacing();
 
-    // --- Per-tab breakdown: EVERY non-player inventory that has items ----
-    // Total     = items the host sees
-    // Valid/OnS = per-item ScreenValid, and valid AND inside the window
-    // GV        = Grid.Valid, GOn = grid rect is on-screen (GridOnScreen)
-    // ClickXY   = grid-computed click point of the 1st item (SlotCenter)
-    // A row usable by GRID withdraw has GV=1 and GOn=1 with a sane ClickXY,
-    // regardless of Valid/OnS.
     ImGui::TextDisabled("All non-player tabs holding items:");
     const ImGuiTableFlags flags = ImGuiTableFlags_Borders
                                 | ImGuiTableFlags_RowBg
@@ -134,8 +106,7 @@ inline void DrawInventoryDiagnostics(const PluginSDK::Context* ctx) {
             ++shown;
             const auto& f = inv.Items.front();
             ImGui::TableNextRow();
-            // Green-tint rows that GRID withdraw could drive (valid on-screen
-            // grid) — the outcome we now care about most.
+
             if (gridOn)
                 ImGui::TableSetBgColor(ImGuiTableBgTarget_RowBg0,
                                        IM_COL32(25, 60, 30, 150));
@@ -331,4 +302,4 @@ inline void DrawUiTreeDiagnostics(const PluginSDK::Context* ctx) {
     }
 }
 
-} // namespace QuickStashUi
+}

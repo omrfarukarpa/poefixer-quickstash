@@ -56,7 +56,7 @@ inline PoeHighlight ReadPoeHighlight(const PluginSDK::Context* ctx) {
         if (!addr || depth > 32) continue;
         if (!ctx->Ui.IsVisible(addr)) continue;
         std::string t = ctx->Ui.GetText(addr);
-        if (!t.empty() && t.size() < 128) {  // long typed filters must not be dropped (would read back as empty = match-all)
+        if (!t.empty() && t.size() < 128) {
             float x = 0.f, y = 0.f, w = 0.f, h = 0.f;
             ctx->Ui.ComputeScreenRect(addr, x, y, w, h);
             texts.push_back({std::move(t), x, y});
@@ -91,4 +91,4 @@ inline PoeHighlight ReadPoeHighlight(const PluginSDK::Context* ctx) {
     return r;
 }
 
-} // namespace QuickStashGame
+}

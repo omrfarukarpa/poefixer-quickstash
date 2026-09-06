@@ -1,20 +1,11 @@
 # Quick Stash
 
-**Version 1.3.2** — written and maintained by **Ömer Faruk ARPA**.
+**Version 1.4.0** — written and maintained by **Ömer Faruk ARPA**.
 
 A [PoeFixer](https://github.com/POEFixer/PoeFixer) plugin for **Path of Exile 2** with two one-click flows:
 
 - **Transfer** — dump your inventory into whatever storage panel is open (stash, vendor, trade, gamble, …) via Ctrl+click.
 - **TAKE (new in 1.2.0)** — the reverse: pull items **out** of the open stash tab back into your inventory. Type in Path of Exile's own **"Highlight Items"** search box and a **TAKE** button appears right above it; it Ctrl+clicks every matching item back to your bag.
-
-> **About.** This is now effectively a ground-up plugin. It began from the
-> QuickStash idea — a Ctrl+click quick-stash button (original author
-> unknown / unlinked) — but the current codebase is its own implementation:
-> a non-blocking, frame-paced click state machine; the TAKE / withdraw flow;
-> reading Path of Exile's native "Highlight Items" box through the UI tree;
-> and extensive crash-hardening and safety work. Written and maintained by
-> Ömer Faruk ARPA. See [Changes in 1.3.0](#changes-in-130),
-> [1.2.0](#changes-in-120), [1.1.1](#changes-in-111), and [1.1.0](#changes-in-110).
 
 ## Demo
 
@@ -32,6 +23,7 @@ A [PoeFixer](https://github.com/POEFixer/PoeFixer) plugin for **Path of Exile 2*
   - **`TAKE (N)`** shows the number of Ctrl+clicks (item stacks); for stacked currency it also shows the **total quantity** (e.g. `TAKE (3)  x30` for three stacks of 10).
   - Works on normal grid tabs **and** special/affinity tabs (currency, fragments, …) via automatic per-item / grid coordinate resolution.
   - **Never targets your own bag, equipment, or charm slots.**
+- **Guild stash support (new in 1.4.0)** — the open **Guild Stash** tab is a first-class storage target: Transfer dumps into it, TAKE withdraws from it, and the button reads **`TAKE G(N)`** so you always know you're pulling from the shared guild chest, not your own tab. Guild Stash support requires **PoeFixer v301 or later**; personal stash support remains available on compatible older hosts.
 - **Exclusion grid** — Click cells in settings to skip slots (weapon column excluded by default). Presets: weapon column only, clear all, select all.
 - **Timing controls** — Click delay, post-click delay, cursor settle, and hold Ctrl after the last click for reliable transfers.
 - **Safety options** — Cancel on right-click; stop if inventory closes mid-transfer.
@@ -50,6 +42,7 @@ A [PoeFixer](https://github.com/POEFixer/PoeFixer) plugin for **Path of Exile 2*
 ## Requirements
 
 - [PoeFixer](https://github.com/POEFixer/PoeFixer) with plugin SDK v6 support
+- **PoeFixer v301+ for Guild Stash support**
 - Path of Exile 2 (Windows)
 - PoeFixer’s built-in auto-stash should be **disabled** if you use this plugin, to avoid conflicting Ctrl+click behavior.
 
@@ -57,27 +50,10 @@ A [PoeFixer](https://github.com/POEFixer/PoeFixer) plugin for **Path of Exile 2*
 
 Pre-built binaries are published on GitHub:
 
-1. On GitHub, open the **Releases** section for this repository and download the latest **`QuickStash-*.zip`**.
-3. Extract the archive. You should get a `QuickStash` folder containing at least:
-   - `QuickStash.dll`
-4. Copy that folder into your PoeFixer install:
-
-   ```
-   <PoeFixer>\Plugins\QuickStash\
-   ```
-
-   Example:
-
-   ```
-   C:\Games\PoeFixer\Plugins\QuickStash\QuickStash.dll
-   ```
-
-5. Start (or restart) PoeFixer and enable **Quick Stash** under **Plugins**.
-6. Open the plugin settings to adjust exclusions and timings. Settings are saved to:
-
-   ```
-   Plugins\QuickStash\config\settings.json
-   ```
+1. Download **QuickStash.dll** from the latest GitHub release.
+2. Close PoeFixer and copy the DLL to `<PoeFixer>\Plugins\QuickStash\QuickStash.dll`.
+3. Start PoeFixer and enable **Quick Stash** under **Plugins**.
+4. Adjust exclusions and timings in the plugin settings. Settings are saved to `Plugins\QuickStash\config\settings.json`.
 
 ## Usage
 
@@ -99,7 +75,7 @@ Right-click during a transfer cancels it (if enabled in settings).
 
 Right-click / alt-tab cancels a running TAKE, same as transfer.
 
-> **Note on filtering.** TAKE matches your search text against each item's **base type, unique name, and internal path** (and future builds, item mods). It reads what you type in Path of Exile's native highlight box, so the plugin does not add its own text field.
+> **Note on filtering.** TAKE matches your search text against each item's **base type and unique name**, plus item mods when **Match item mods in filter** is enabled. It reads what you type in Path of Exile's native highlight box, so the plugin does not add its own text field.
 
 ## Build from source
 
@@ -130,6 +106,17 @@ ui/ExclusionGrid.h          12×5 exclusion editor in settings
 ui/InventoryDiagnostics.h   Debug-mode inventory / UI-tree inspectors
 sdk/                        PoeFixer Plugin SDK headers
 ```
+
+## Changes in 1.4.0
+
+Adds **Guild Stash** support for **PoeFixer v301+**:
+
+- The host now publishes the currently open **Guild Stash tab** as its own inventory (`PSDK_INVENTORY_ID_GUILD_STASH` = `10002`, name `GuildStash1`) — the guild tab does not exist in the game's player-inventory list, so older hosts could not expose it at all.
+- **TAKE** works on the guild stash and labels itself **`TAKE G(N)`** there, so the guild chest is never mistaken for a personal tab.
+- `FindOpenStash` / `FindOpenStashAny` accept the guild inventory explicitly (not by accident of name filtering), and the debug inspector tags it `[GUILD]`.
+- Uses the existing SDK v6 headers unchanged; the reserved guild inventory id is recognized locally, preserving the host compatibility requirement of 1.3.2.
+- Converts game-client item coordinates to screen coordinates before moving the cursor, including windowed clients. Missing game windows abort the run.
+- Shares a 50 ms Ctrl settling delay between Transfer and TAKE, and limits hardware button activation to live overlay mouse coordinates.
 
 ## Changes in 1.3.0
 

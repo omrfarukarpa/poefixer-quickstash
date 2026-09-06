@@ -5,12 +5,10 @@
 
 namespace QuickStashUi {
 
-// Shared grid colours so the cells and the legend always match.
-inline constexpr ImU32 kCellExcluded = IM_COL32(180, 60, 60, 220);   // red
-inline constexpr ImU32 kCellIncluded = IM_COL32(60, 120, 60, 180);   // green
+inline constexpr ImU32 kCellExcluded = IM_COL32(180, 60, 60, 220);
+inline constexpr ImU32 kCellIncluded = IM_COL32(60, 120, 60, 180);
 inline constexpr ImU32 kCellBorder   = IM_COL32(120, 120, 120, 255);
 
-// Draws a small colour swatch followed by a label, used for the legend.
 inline void LegendSwatch(const char* label, ImU32 color) {
     const float sz = ImGui::GetFontSize();
     ImDrawList* dl = ImGui::GetWindowDrawList();
@@ -27,7 +25,6 @@ inline void DrawExclusionGrid(QuickStashConfig::Settings& settings) {
     ImGui::Text("Excluded cells (click to toggle):");
     ImGui::TextDisabled("Columns = X (0=left), Rows = Y (0=top)");
 
-    // Legend: explain what the two cell colours mean.
     LegendSwatch("Green = transferred", kCellIncluded);
     ImGui::SameLine(0.f, 18.f);
     LegendSwatch("Red = skipped (kept in bag)", kCellExcluded);
@@ -62,11 +59,9 @@ inline void DrawExclusionGrid(QuickStashConfig::Settings& settings) {
         }
     }
 
-    // Reserve exactly the grid's footprint so following widgets sit just below
-    // it (the previous Dummy double-counted the height and left a big gap).
     ImGui::SetCursorScreenPos(ImVec2(origin.x, origin.y));
     ImGui::Dummy(ImVec2(QuickStashConfig::kGridCols * cellSize,
                         QuickStashConfig::kGridRows * cellSize));
 }
 
-} // namespace QuickStashUi
+}

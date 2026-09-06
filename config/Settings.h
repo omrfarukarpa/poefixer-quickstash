@@ -13,9 +13,6 @@ namespace QuickStashConfig {
 inline constexpr int kGridCols = 12;
 inline constexpr int kGridRows = 5;
 
-// Single source of truth for timing bounds: used by BOTH the DrawSettings
-// sliders and Settings::Load clamps, so a value loaded from JSON can never sit
-// outside what the slider can show (which previously made it snap silently).
 inline constexpr int kClickDelayMinMs      = 10;
 inline constexpr int kClickDelayMaxMs      = 500;
 inline constexpr int kPostClickDelayMinMs  = 0;
@@ -60,11 +57,6 @@ struct Settings {
         return pluginDir / "config" / "settings.json";
     }
 
-    // Reads settings.json into *this. A corrupt or hand-edited file (malformed
-    // JSON, trailing comma, or a value with the wrong type) must NEVER throw:
-    // Load is called from OnEnable, and an exception escaping across the C ABI
-    // boundary into the host is undefined behaviour and crashes the whole host.
-    // On any failure we silently keep the in-memory defaults.
     void Load(const std::filesystem::path& pluginDir) {
         try {
             const auto path = SettingsPath(pluginDir);
@@ -72,9 +64,7 @@ struct Settings {
             std::ifstream in(path);
             if (!in.is_open()) return;
 
-            // Non-throwing parse: a malformed document yields a discarded value
-            // instead of raising json::parse_error.
-            nlohmann::json j = nlohmann::json::parse(in, nullptr, /*allow_exceptions=*/false);
+            nlohmann::json j = nlohmann::json::parse(in, nullptr,                      false);
             if (j.is_discarded() || !j.is_object()) return;
 
             enabled = j.value("enabled", enabled);
@@ -98,8 +88,7 @@ struct Settings {
                 for (int y = 0; y < kGridRows && y < static_cast<int>(rows.size()); ++y) {
                     if (!rows[y].is_array()) continue;
                     for (int x = 0; x < kGridCols && x < static_cast<int>(rows[y].size()); ++x) {
-                        // Guard every cell: a non-boolean entry would otherwise
-                        // throw type_error.302 out of get<bool>().
+
                         if (rows[y][x].is_boolean())
                             ignoredCells[static_cast<size_t>(y)][static_cast<size_t>(x)] =
                                 rows[y][x].get<bool>();
@@ -107,7 +96,7 @@ struct Settings {
                 }
             }
         } catch (...) {
-            // Corrupt/unexpected file shape — keep defaults, never propagate.
+
         }
     }
 
@@ -142,9 +131,9 @@ struct Settings {
         if (out.is_open())
             out << j.dump(2);
       } catch (...) {
-        // Disk/serialization failure must not propagate across the C ABI.
+
       }
     }
 };
 
-} // namespace QuickStashConfig
+}

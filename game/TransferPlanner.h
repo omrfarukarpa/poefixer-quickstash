@@ -8,10 +8,6 @@
 
 namespace QuickStashGame {
 
-// Only the slot is stored. Screen coordinates are recomputed from the LIVE
-// grid at click time (see TransferState::Tick), so the queue stays correct
-// even if the inventory panel moves, scrolls, or the UI scale changes
-// mid-transfer.
 struct ClickTarget {
     int slotX = 0;
     int slotY = 0;
@@ -56,8 +52,6 @@ inline std::vector<ClickTarget> BuildClickQueue(
         queue.push_back(t);
     }
 
-    // Click top-to-bottom, left-to-right. Each item already occupies a unique
-    // top-left slot, so no de-duplication is needed.
     std::sort(queue.begin(), queue.end(), [](const ClickTarget& a, const ClickTarget& b) {
         if (a.slotY != b.slotY) return a.slotY < b.slotY;
         return a.slotX < b.slotX;
@@ -65,4 +59,4 @@ inline std::vector<ClickTarget> BuildClickQueue(
     return queue;
 }
 
-} // namespace QuickStashGame
+}

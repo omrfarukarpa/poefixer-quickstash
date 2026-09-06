@@ -10,7 +10,7 @@ namespace QuickStashOverlay {
 
 inline constexpr float kButtonW = 88.f;
 inline constexpr float kButtonH = 24.f;
-// Default screen position above grid top-left; settings offsets are relative to this.
+
 inline constexpr float kButtonBaseOffsetX = 0.f;
 inline constexpr float kButtonBaseOffsetY = -40.f;
 
@@ -34,12 +34,6 @@ inline bool HitRect(const ImVec2& p, ImVec2 p0, ImVec2 p1) {
     return p.x >= p0.x && p.x < p1.x && p.y >= p0.y && p.y < p1.y;
 }
 
-// ImGui often never sees LMB on the button (game eats it). Hardware edge still works.
-// Fires on the RELEASE edge only: a single real click is one press + one
-// release, and returning true on both edges (pressed || released) double-fired
-// the activation. Release-only also avoids triggering while the button is held.
-// One tracker instance per button; Update must run every frame the button
-// exists so the press/release edge state never goes stale.
 struct HardwareClick {
     bool wasDown = false;
     bool pressedOnRect = false;
@@ -47,13 +41,12 @@ struct HardwareClick {
     bool Update(bool rectActive, ImVec2 p0, ImVec2 p1) {
         const bool down = (GetAsyncKeyState(VK_LBUTTON) & 0x8000) != 0;
 
-        POINT pt{};
-        const bool haveCursor = GetCursorPos(&pt) != 0;
-        const ImVec2 mouse(static_cast<float>(pt.x), static_cast<float>(pt.y));
-        const bool overRect = rectActive && haveCursor && HitRect(mouse, p0, p1);
+        const ImVec2 mouse = ImGui::GetIO().MousePos;
+        const bool overRect = rectActive && ImGui::IsMousePosValid()
+                              && HitRect(mouse, p0, p1);
 
         if (down && !wasDown)
-            pressedOnRect = overRect;   // press edge: remember where it started
+            pressedOnRect = overRect;
         const bool released = !down && wasDown;
         const bool clicked = released && pressedOnRect && overRect;
         if (released)
@@ -114,14 +107,10 @@ inline TransferButtonResult DrawOverlayButton(const ImVec2& pos,
 
     r.beginOk = ImGui::Begin(windowId, nullptr, flags);
     if (r.beginOk) {
-        r.clicked = ImGui::Button(label, size);  // ImGui's own click already requires press+release on the button
+        r.clicked = ImGui::Button(label, size);
         r.hovered = ImGui::IsItemHovered();
         r.held = ImGui::IsItemActive();
-        // No release-only fallback here: it fired on any release-while-hovered
-        // even when the press began off the button (e.g. a drag from the stash
-        // panel just above). The hardware-edge tracker (HardwareClick, with a
-        // press-origin check) covers the case where the game eats the click and
-        // ImGui never sees it.
+
     }
     ImGui::End();
 
@@ -138,9 +127,11 @@ inline TransferButtonResult DrawTransferButton(const PluginSDK::Inventory& inv,
                              "##quick_stash_transfer");
 }
 
-inline TransferButtonResult DrawWithdrawButtonAt(const ImVec2& pos, int count) {
+inline TransferButtonResult DrawWithdrawButtonAt(const ImVec2& pos, int count,
+                                                 bool guildSource) {
+
     char label[32];
-    snprintf(label, sizeof(label), "TAKE (%d)", count);
+    snprintf(label, sizeof(label), guildSource ? "TAKE G(%d)" : "TAKE (%d)", count);
     return DrawOverlayButton(pos, label, "##quick_stash_withdraw");
 }
 
@@ -151,4 +142,4 @@ inline void DrawTransferProgress(int index, int total, const char* verb = "Trans
     ImGui::GetForegroundDrawList()->AddText(ImVec2(12.f, 12.f), IM_COL32(205, 180, 110, 255), buf);
 }
 
-} // namespace QuickStashOverlay
+}
