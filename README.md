@@ -1,6 +1,6 @@
 # Quick Stash
 
-**Version 1.4.0** — written and maintained by **Ömer Faruk ARPA**.
+**Version 1.4.1** — written and maintained by **Ömer Faruk ARPA**.
 
 A [PoeFixer](https://github.com/POEFixer/PoeFixer) plugin for **Path of Exile 2** with two one-click flows:
 
@@ -106,6 +106,14 @@ ui/ExclusionGrid.h          12×5 exclusion editor in settings
 ui/InventoryDiagnostics.h   Debug-mode inventory / UI-tree inspectors
 sdk/                        PoeFixer Plugin SDK headers
 ```
+
+## Changes in 1.4.1
+
+Adds **multi-language support** for the native Highlight Items search bar:
+
+- **Localized Highlight box recognition** — TAKE now recognizes Path of Exile's native "Highlight Items" search bar across all supported game client languages (Korean `아이템 강조하기`, Traditional Chinese `突顯項目` / `醒目提示道具`, Simplified Chinese `高亮物品` / `突出显示物品`, Russian `Подсветить вещи` / `Подсветка предметов`, German `Gegenstände hervorheben`, French `Mettre les objets en surbrillance`, Spanish `Resaltar objetos`, Portuguese `Destacar Itens`, Japanese `アイテムをハイライト`, and Thai `เน้นไอเทม`).
+- **Fallback UI identifier search** — searches for UI string identifiers if localized label matching is unavailable.
+- **Localized placeholder filtering** — automatically filters out native language search box placeholders when empty, ensuring "take all" correctly operates without false filter terms.
 
 ## Changes in 1.4.0
 
