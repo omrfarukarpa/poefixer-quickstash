@@ -1,5 +1,28 @@
 # Project memory
 
+## 2026-09-23 — TAKE filtre düzeltmesi, v1.4.2-beta.1 yayını
+
+- Kullanıcının yeni bilgisi: geliştirici host'u düzelttikten sonra Korece istemcide TAKE görünür oldu; İngilizce sorguyla ilgisiz eşyaların sonuçlarda kaldığı bildirildi. Bu gerçek oyun gözlemi yerel olarak tekrar üretilemedi; 2026-09-22 host/SDK analizi artık bu belirti için blokaj olarak ele alınmıyor.
+- `ReadPoeHighlight` önce UI yürüyüşünde ilk aynı satır metnini alıyordu; artık etikete yakın kabul edilen metinler içinde en yakın X seçilir. Alan değeri de placeholder'ı da okunamıyorsa TAKE kapatılır, boş filtre sanılıp bütün sekme hedeflenmez. Bağımsız kaynak incelemesi UI satırında başka bir metnin daha yakın olabileceğini (canlı kanıt yok) işaretledi; birden fazla farklı metin veya placeholder+değer birlikte görülürse TAKE bu yüzden gizlenir. Tek başına yanlış/uzak etiket olasılığı hâlâ oyun içi kontrol gerektirir.
+- `BuildModText` arama metninden oyunda görünmeyen `Mod.Id` ve `StatKey` kaldırıldı; `Name`, `AffixName`, `FormatStat` ve mevcut bozulma/aggregate etiketleri kalır. Gizli anahtarlardan gelen yanlış eşleşmeleri azaltır; başka dillerde ad/affix ve biçimlendirilmiş statların nasıl döndüğü oyun içi tanı ekranıyla karşılaştırılmalı.
+- `QuickStash.cpp` ve README sürümü 1.4.2-beta.1 olarak güncellendi. Temiz Release/x64 derlemesi tamamlandı; DLL SHA-256 özeti `b34d299eaaf529a3d609cb67303210861fb4687c88cf752941cfd1ea2ccfa57b`. Kullanıcının açık "beta sürümleri ilerletip yayınlayalım" talimatıyla GitHub'da prerelease olarak yayımlandı. Oyun içi Korece doğrulama kullanıcı topluluğundan bekleniyor.
+
+## 2026-09-22 — Host/SDK Unicode change investigation
+
+- `POEFixer/ExamplePlugin` public `master` branch still points at 2026-08-23 commit `b2e52aad`; `UiServiceAbi::get_text/get_string_id` and C++ wrappers have unchanged signatures there. No public Unicode-specific SDK method was found. Public v345 host release (2026-09-22) mentions trade and protected-slot changes, not a Unicode SDK fix.
+- Installed `D:/POE2/fixer/fixer.exe` was last modified 2026-09-18; v345 has not been installed in that folder. No separate newer `PluginAbi.h` was found in the local workspace/downloads.
+- Proposed bounded follow-up awaiting the actual updated host/SDK package or developer's change notes: compare new ABI layout to installed host, expose raw UTF-8 byte diagnostics for the Korean UI label, then update only the required QuickStash call path and clean-build/deploy locally; no publication requested.
+
+## 2026-09-19 — Korean UI detection report
+
+- User supplied the requested Debug UI-tree capture with the game still in Korean, both inventory and stash open, and `fire` typed into the native search field. The game screenshot visibly shows the label `아이템 강조하기` and the query `fire` at the bottom-left.
+- The UI-tree table renders the label row at approximately `391,1178` as `??? ????` in both Text and StringId, while the query row is `fire` at approximately `547,1173`. A screenshot of `ImGui::TextUnformatted` cannot distinguish literal `?` bytes returned by the host from missing Korean font glyphs replaced during rendering; raw UTF-8 byte diagnostics are needed before attributing the defect to the host.
+- This isolates the failure to Korean Highlight Items recognition, not necessarily to host string conversion. Do not add another guessed Korean spelling or claim Unicode data loss until raw bytes or the updated host implementation confirm it; English remains a temporary workaround.
+
+## 2026-09-19 — English-language control case
+- User confirmed that the same v1.4.1 DLL shows and operates TAKE when the game language is switched to English, while Korean mode does not. The attached screenshot shows the working English anchor and placeholder (`Highlight Items`, `Type keywords here...`, `TAKE (0)`). This isolates the failure to Korean Highlight Items UI recognition; stash detection, plugin loading, button rendering, and click flow are working.
+- v1.4.1 includes Korean anchor strings (`아이템 강조하기`, `아이템 강조`) and ASCII StringId fragments; the Korean Debug capture above is the next evidence. Font glyph absence and host conversion remain competing hypotheses pending raw bytes.
+
 ## 2026-09-18 — Multi-language Highlight Items support, published v1.4.1
 
 - Added multi-language recognition for the native "Highlight Items" search bar across all supported PoE client languages (Korean 아이템 강조하기, Traditional/Simplified Chinese, Russian, German, French, Spanish, Portuguese, Japanese, Thai).

@@ -1,6 +1,6 @@
 # Quick Stash
 
-**Version 1.4.1** — written and maintained by **Ömer Faruk ARPA**.
+**Version 1.4.2-beta.1 (prerelease)** — written and maintained by **Ömer Faruk ARPA**.
 
 A [PoeFixer](https://github.com/POEFixer/PoeFixer) plugin for **Path of Exile 2** with two one-click flows:
 
@@ -106,6 +106,13 @@ ui/ExclusionGrid.h          12×5 exclusion editor in settings
 ui/InventoryDiagnostics.h   Debug-mode inventory / UI-tree inspectors
 sdk/                        PoeFixer Plugin SDK headers
 ```
+
+## Changes in 1.4.2-beta.1
+
+- **TAKE search selection** — choose the nearest visible text beside the native Highlight Items label instead of the first UI-tree row. If the field is unreadable or multiple different text values appear in its row, hide TAKE rather than risk taking unrelated items. A recognized empty-field placeholder still allows taking the whole tab.
+- **Fewer false mod matches** — ignore hidden mod IDs and raw stat keys; match mod/affix names and formatted stat descriptions instead.
+
+**Beta testing:** Korean-client TAKE filtering has not yet been verified in-game. Before clicking TAKE, compare the outlined items and TAKE count to the game's native search results. If they differ, report the game language and query with screenshots of the native search field and the plugin's Debug UI-tree and withdraw filter haystack panels.
 
 ## Changes in 1.4.1
 

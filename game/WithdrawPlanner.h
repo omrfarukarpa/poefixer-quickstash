@@ -86,8 +86,6 @@ inline std::string BuildModText(const PluginSDK::Context* ctx,
         for (const auto& m : *g) {
             if (!m.AffixName.empty()) { s += '\n'; s += m.AffixName; }
             if (!m.Name.empty())      { s += '\n'; s += m.Name; }
-            if (!m.Id.empty())        { s += '\n'; s += m.Id; }
-            if (!m.StatKey.empty())   { s += '\n'; s += m.StatKey; }
             const auto line = ctx->Inventory.FormatStat(m.StatKey, m.Value0, m.Value1);
             if (!line.empty())        { s += '\n'; s += line; }
         }

@@ -195,17 +195,27 @@ inline PoeHighlight ReadPoeHighlight(const PluginSDK::Context* ctx) {
     r.x = anchorX;
     r.y = anchorY;
 
+    const TextEl* value = nullptr;
+    bool placeholderFound = false;
+    bool ambiguous = false;
     for (const auto& e : texts) {
-        if (e.text.empty()) continue;
+        if (TrimAscii(e.text).empty()) continue;
         if (IsHighlightAnchorText(e.text)) continue;
-        if (IsPlaceholderText(e.text)) continue;
-        if (e.x <= anchorX) continue;
+        const float dx = e.x - anchorX;
         float dy = e.y - anchorY;
         if (dy < 0.f) dy = -dy;
-        if (dy > 20.f) continue;
-        r.filter = TrimAscii(e.text);
-        break;
+        if (dx <= 0.f || dx > 450.f || dy > 20.f) continue;
+        if (IsPlaceholderText(e.text)) {
+            placeholderFound = true;
+            continue;
+        }
+        if (value && value->text != e.text) ambiguous = true;
+        if (!value || dx < value->x - anchorX)
+            value = &e;
     }
+    if (ambiguous || (placeholderFound && value)) r.found = false;
+    else if (value) r.filter = TrimAscii(value->text);
+    else if (!placeholderFound) r.found = false;
     return r;
 }
 
