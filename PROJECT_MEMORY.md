@@ -8,6 +8,7 @@
 - Değişiklik: `ItemTextCache` (eski `ModTextCache`) filtre doluyken `ReadItemBaseTypeName`/`ReadItemUniqueName` sonucunu liste adından farklıysa isim havuzuna ekler (64/çağrı bütçe, adres+Path önbelleği). Debug "Diagnostics: text encoding report": filtre ve ilk 30 eşya için liste/direkt isim, mod metni, sınıf (`utf8`, `ascii+?`, `not-utf8`) ve hex; "Copy text report" panoya kopyalar ve `config/text-report.txt` yazar.
 - `kQuickStashVersion` ve README 1.4.2-beta.2. Temiz Release/x64 derleme 0 uyarı; DLL SHA-256 `adb8182313783b4b674a88c60755fb071dd8565759eb5812f77d76b3f2a7e6d0`, yerel kuruluma kopyalandı. Oyun içi doğrulama yok; otomatik test çalıştırılmadı.
 - Risk: İngilizce istemcide direkt isim liste adından farklı bir biçim dönerse (ör. iç kimlik) yanlış eşleşme üretebilir; beta.2 rapor/Debug tablosuyla kontrol edilmeli. Direkt yol da kayıplıysa isim ve Korece stat metni host düzeltmesi ister.
+- Yayın: kullanıcının açık "release edip" talimatıyla `1611ebe` gönderildi ve GitHub prerelease oluşturuldu: https://github.com/omrfarukarpa/poefixer-quickstash/releases/tag/v1.4.2-beta.2. Tag `1611ebe`'yi gösteriyor; notlar dosyadan birebir yüklendi; indirilen `QuickStash.dll` HTTP 200 ve SHA-256 derlemeyle aynı. Notlar Korece test adımlarını (Debug → text encoding report → Copy text report) içeriyor.
 
 ## 2026-09-23 — TAKE filtre düzeltmesi, v1.4.2-beta.1 yayını
 
