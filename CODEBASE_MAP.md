@@ -18,7 +18,7 @@ Windows x64/C++20 DLL; `QuickStash.sln` ve `QuickStash.vcxproj`, MSVC v145. Tek 
 | `input/Win32Input.h` | Win32 SendInput, Ctrl scan code, client→screen dönüşümü |
 | `overlay/TransferButtonOverlay.h` | Transfer, TAKE/TAKE G(N), ilerleme ve HardwareClick |
 | `ui/ExclusionGrid.h` | Çanta hariç tutma hücreleri |
-| `ui/InventoryDiagnostics.h` | Envanter, filtre metni, Agg anahtarları ve UI ağacı tanısı |
+| `ui/InventoryDiagnostics.h` | Envanter, filtre metni, Agg anahtarları, metin kodlama raporu (pano + `config/text-report.txt`) ve UI ağacı tanısı |
 | `sdk/PluginAbi.h`, `sdk/PluginSDK.h` | C ABI v6 ve C++ sarmalayıcıları; authoritative upstream POEFixer/ExamplePlugin |
 
 ## Çalışma akışı
@@ -35,12 +35,36 @@ Windows x64/C++20 DLL; `QuickStash.sln` ve `QuickStash.vcxproj`, MSVC v145. Tek 
 ## Dikdörtgen ve filtre sözleşmesi
 
 - Önce ScreenValid eşyanın gerçek dikdörtgeni, ardından yalnızca `GridLayoutPlausible` geçen grid hesabı kullanılır. Düz/aşırı geniş özel tab ızgarasına normal slot hesabı uygulanmaz.
-- İsim filtresi BaseTypeName + UniqueName içerir; internal Path isim aramasına katılmaz.
+- İsim filtresi BaseTypeName + UniqueName içerir; filtre doluyken per-item `ReadItemBaseTypeName`/`ReadItemUniqueName` sonucu liste adından farklıysa eklenir (1.4.2-beta.2, yerelleştirilmiş istemciler için). Internal Path isim aramasına katılmaz.
 - Mod metni yalnızca `readMods` açık ve filtre doluyken okunur. Liveness probe `ReadItemBaseTypeName`; sonra ReadItemMods/ReadItemAggregatedStats. Corrupted bilgisi mod sonucundan gelir. Gizli `Id`/ham `StatKey` metinleri arama havuzundan çıkarıldı; görünen mod/affix adları ile FormatStat açıklaması kalır.
-- Mod önbelleği adresle anahtarlanır; kaynak Path değişince yenilenir. Bir CollectCandidates çağrısının bütçesi 40 okuma; harita 4000 girdiyi aşınca temizlenir. Bu bütçe zamanlayıcı başına değil çağrı başınadır.
+- `ItemTextCache` adresle anahtarlanır; kaynak Path değişince girdi sıfırlanır. Bir CollectCandidates çağrısının bütçesi 64 isim ve 40 mod okuma; harita 4000 girdiyi aşınca temizlenir. Bütçe zamanlayıcı başına değil çağrı başınadır.
 - Aggregate etiketleri: 8206 Item Rarity, 8207 Monster Pack Size, 8208 Monster Rarity, 8209 Monster Effectiveness, 8210 Waystone Drop Chance. Sıfır dışı değer etiket ekler; sayısal eşik karşılaştırması değildir. Host değişirse debug Agg sütunuyla doğrula.
 - HardwareClick, ImGui MousePos kullanır; yalnızca host overlay modunda güvenilir sayılır. DrawUI boşluklarında basış takibi sıfırlanır.
 - Guild yayıncısı PoeFixer v301 gerektirir. Bu sürümde vendored SDK değişmemiştir; ABI boyut gereksinimi 1.3.2 ile aynıdır.
+
+## Mimari gerekçeler
+
+- Render iş parçacığı: `DrawUI()`, `DrawSettings()` ve `OnFrame` geri çağrısı host render iş parçacığında senkron çalışır; SDK `EventsService::Subscribe`, `std::function`'ı doğrudan çağıran yakalamasız bir trampoline kurar, host tarafında kuyruk veya iş parçacığı geçişi yoktur. Bu yüzden aktarım `Sleep` içeren bir döngü değil, kare bazlı bloklamayan bir durum makinesidir.
+- `HostCompatible()` başarısız olursa `m_ctx` doldurulmaz ve servis işaretçileri null kalır; SDK sarmalayıcıları null kontrolü yaptığından `ctx()->Log` yine güvenlidir.
+- Ctrl bütün çalışma boyunca basılı tutulur (doğru Ctrl+tıklama semantiği) ve üç bağımsız yolla bırakılır: `~TransferState` (OnDisable olmadan zorla boşaltmada `CtrlUp`), `IsRunning()` dalında `Tick`'ten önce yapılan ön plan kaybı iptali ve watchdog (`WatchdogBudgetMs`).
+- Giriş: PoE2 raw input okur; yalnızca VK ile enjekte edilen Ctrl, Ctrl+tıklamayı düz almaya çevirir. Bu yüzden Ctrl `KEYEVENTF_SCANCODE` ile gönderilir. İmleç, süreç DPI farkındalığından bağımsız hedefleme için mutlak sanal masaüstü `SendInput` ile taşınır (`SetCursorPos` değil).
+- Filtre girişi: `Overlay.SetWantsOverlayInput(true)` yalnızca fareyi overlay'e yönlendirir, klavyeyi değil; oyun içi ImGui `InputText` karakter almadığı için denenip kaldırıldı ve eski `withdrawFilter` ayarı silindi. `ReadPoeHighlight`, UI ağacında `GetGameUiRoot` → `GetChildren`/`GetText`/`GetStringId`/`ComputeScreenRect` ile etiketi bulur; ankraj dikdörtgeni TAKE düğmesini de konumlar.
+- İsim haystack'inde internal `Path` yoktur: gizli kelimeler sızıyordu (ör. tek "w", her tabletin path'indeki "toWer" ile eşleşiyordu).
+- Aggregate etiketleri varlık eşleşmesidir, eşik değildir: PoE kutusu `>= X` yapamaz; aynı tier'daki her waystone'da bulunan bir ödül statı hepsini eşleştirir. Gerçek eşik filtresi ayrı bir overlay UI gerektirir. Debug "Agg key:val" sütunu (`DebugAggregatedPairs`) canlı anahtarları gösterir.
+- `ResolveItemRect` sıra gerekçesi: normal grid sekmeleri `ScreenValid=0` ama geçerli, düzgün bir ekran ızgarası raporlar; özel/affinity sekmeler (currency, gem/skill) gerçek eşya dikdörtgenleri verir ama mantıksal ızgaraları (currency 53×4, skill sekmesi düz geniş satır) görsel düzene uymaz. `GridLayoutPlausible`, `TotalBoxesY < 6` veya ekrandan geniş ızgarayı reddeder. Ters sıra, özel sekmede vurguları ekran dışı bir şerit olarak saçıyordu.
+- `InventoryService::GetAll()` 100+ envanter döndürür: `MainInventory1`, ekipman slotları (`BodyArmour1`, `Weapon1/2`, `Offhand1/2`, `Helm1`, `Amulet1`, `Ring1/2`, `Gloves1`, `Boots1`, `Belt1`, `Flask1`, `Trinket`, `Charm*`), `Cursor1` ve sahip olunan her stash sekmesi. 1–13 sabit oyuncu slotları, stash sekmeleri 14+. Charm bir kez yalnızca isim dışlamasından kaçtı; alan <10 koruması yedektir.
+- Görünür sekme yalıtımı: tek sekme açıkken yalnızca o sekme ekranda raporlanır. Birden fazla dolu sekmenin aynı anda yerleşip yerleşemeyeceği doğrulanmaya devam etmeli.
+- TAKE (N) tıklama/yığın sayısıdır; yığınlı currency ayrıca `x{toplam}` (`StackCount` toplamı) çizer; eşleşmeler açık mavi çerçeveyle vurgulanır. TAKE noktaları başlangıçta sabitlenir, Transfer ise her Tick'te canlı çanta ızgarasından yeniden hesaplar.
+
+## Host sözleşmesi (kullanılan yüzey)
+
+QuickStash ham oyun belleği offset'i tutmaz; yalnızca host çözümlü envanter verisini kullanır: `GridScreenX/Y`, `CellSize`, `TotalBoxesX/Y`, `Items` ve eşya başına `ScreenX/Y/W/H`, `ScreenValid`, `StackCount`.
+
+- `Game.IsInGame`/`IsForeground`/`IsOverlayMode`/`GetGameWindow`/`GetScreenSize`; `Events.OnFrame`/`Unsubscribe`; `Overlay.SetWantsOverlayInput`; `Log.Info`/`Warn`/`Error`.
+- `Inventory.GetAll`/`GetName`/`Scan`, `ReadItemBaseTypeName`, `ReadItemUniqueName`, `ReadItemMods`, `ReadItemAggregatedStats`, `FormatStat`.
+- `Ui.GetGameUiRoot`/`GetChildren`/`GetText`/`GetStringId`/`ComputeScreenRect`/`IsVisible`.
+
+Host güncellemesinden sonra yalnızca bu struct ve imzaların eski-yeni farkı incelenir; yorumlar dışında bayt bayt aynıysa saf uyumluluk derlemesidir.
 
 ## Veri, komut ve kurulum
 
@@ -59,3 +83,4 @@ TAKE koordinatları başlangıçta sabitlenir; aktarım sırasında sekme düzen
 ## 2026-09-19 canlı kullanıcı kanıtı
 
 - İngilizce istemcide v1.4.1 TAKE görünür ve çalışır; Korece istemcide oyun label'ı `아이템 강조하기`, UI-tree **ImGui görünümü** ise `??? ????` gösterir; `fire` arama değeri okunur. Bu görünüm host'un gerçekten `?` baytları gönderdiğini kanıtlamaz: ImGui atlasındaki eksik Korece glifler de aynı görüntüyü üretebilir. `PoeHighlight.h` içindeki ham bayt eşleşmesi ile ekran çizimini ayıracak ASCII/hex tanı gereklidir; yeni Korece metin tahminiyle release yapılmamalıdır.
+- 2026-09-23 güncellemesi: host düzeltmesinden sonra Korece istemcide TAKE görünür oldu; 2026-09-22 host/SDK analizi bu belirti için artık blokaj sayılmıyor. Kalan sorun eklenti tarafı arama eşleşmesidir; 1.4.2-beta.1 değişiklikleri için `PROJECT_MEMORY.md`.

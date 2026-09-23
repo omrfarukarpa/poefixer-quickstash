@@ -18,7 +18,7 @@
 #include <utility>
 #include <vector>
 
-inline constexpr const char* kQuickStashVersion    = "1.4.2-beta.1";
+inline constexpr const char* kQuickStashVersion    = "1.4.2-beta.2";
 inline constexpr const char* kQuickStashMaintainer = "Omer Faruk ARPA";
 
 class QuickStashPlugin : public PluginSDK::Plugin {
@@ -127,6 +127,8 @@ public:
         if (m_settings.debugMode) {
             QuickStashUi::DrawInventoryDiagnostics(ctx());
             QuickStashUi::DrawWithdrawHaystackDump(ctx());
+            QuickStashUi::DrawTextEncodingDiagnostics(ctx(), kQuickStashVersion,
+                                                      DirectoryPath());
             QuickStashUi::DrawUiTreeDiagnostics(ctx());
         }
     }
@@ -266,9 +268,10 @@ public:
             m_withdrawQty = 0;
             return;
         }
-        const bool needMods = m_settings.readMods && !filter.empty();
+        const bool needText = !filter.empty();
+        const bool needMods = m_settings.readMods && needText;
         m_candidates = QuickStashGame::CollectCandidates(
-            ctx(), *stash, disp.x, disp.y, &m_modCache, needMods);
+            ctx(), *stash, disp.x, disp.y, &m_textCache, needText, needMods);
         auto sel = QuickStashGame::FilterCandidates(m_candidates, filter);
         m_withdrawTargets = std::move(sel.rects);
         m_withdrawCount = static_cast<int>(m_withdrawTargets.size());
@@ -318,7 +321,7 @@ private:
     std::chrono::steady_clock::time_point m_lastPoeRead{};
     std::vector<QuickStashGame::ScreenRect> m_withdrawTargets;
     std::vector<QuickStashGame::WithdrawCandidate> m_candidates;
-    QuickStashGame::ModTextCache m_modCache;
+    QuickStashGame::ItemTextCache m_textCache;
     std::chrono::steady_clock::time_point m_lastStashCheck{};
     int m_stashMissStreak = 0;
 

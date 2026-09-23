@@ -44,7 +44,8 @@ inline bool ContainsCI(const std::string& hay, const std::string& needle) {
 }
 
 inline constexpr int kMaxModReadsPerScan = 40;
-inline constexpr size_t kModCacheMax = 4000;
+inline constexpr int kMaxNameReadsPerScan = 64;
+inline constexpr size_t kItemTextCacheMax = 4000;
 
 inline constexpr int kAggItemRarity           = 8206;
 inline constexpr int kAggPackSize             = 8207;
@@ -69,6 +70,24 @@ inline std::string BuildNameSearchText(const PluginSDK::InventoryItem& item) {
     s += item.BaseTypeName;
     s += '\n';
     s += item.UniqueName;
+    return s;
+}
+
+inline std::string BuildDirectNameText(const PluginSDK::Context* ctx,
+                                       const PluginSDK::InventoryItem& item) {
+    std::string s;
+    if (!ctx || !item.Address) return s;
+    const std::string base = ctx->Inventory.ReadItemBaseTypeName(item.Address);
+    if (base.empty()) return s;
+    if (base != item.BaseTypeName) {
+        s += '\n';
+        s += base;
+    }
+    const std::string unique = ctx->Inventory.ReadItemUniqueName(item.Address);
+    if (!unique.empty() && unique != item.UniqueName) {
+        s += '\n';
+        s += unique;
+    }
     return s;
 }
 
@@ -114,37 +133,57 @@ inline std::string DebugAggregatedPairs(const PluginSDK::Context* ctx,
     return s;
 }
 
-class ModTextCache {
+class ItemTextCache {
 public:
     void BeginScan() {
-        m_budget = kMaxModReadsPerScan;
-        if (m_map.size() > kModCacheMax) m_map.clear();
+        m_nameBudget = kMaxNameReadsPerScan;
+        m_modBudget = kMaxModReadsPerScan;
+        if (m_map.size() > kItemTextCacheMax) m_map.clear();
     }
 
-    const std::string& Get(const PluginSDK::Context* ctx,
-                           const PluginSDK::InventoryItem& item) {
-        Entry& e = m_map[item.Address];
-        if (e.sourcePath != item.Path) {
-            e.sourcePath = item.Path;
-            e.read = false;
-            e.text.clear();
+    const std::string& DirectNames(const PluginSDK::Context* ctx,
+                                   const PluginSDK::InventoryItem& item) {
+        Entry& e = Lookup(item);
+        if (!e.namesRead && m_nameBudget > 0) {
+            e.names = BuildDirectNameText(ctx, item);
+            e.namesRead = true;
+            --m_nameBudget;
         }
-        if (!e.read && m_budget > 0) {
-            e.text = BuildModText(ctx, item);
-            e.read = true;
-            --m_budget;
+        return e.names;
+    }
+
+    const std::string& Mods(const PluginSDK::Context* ctx,
+                            const PluginSDK::InventoryItem& item) {
+        Entry& e = Lookup(item);
+        if (!e.modsRead && m_modBudget > 0) {
+            e.mods = BuildModText(ctx, item);
+            e.modsRead = true;
+            --m_modBudget;
         }
-        return e.text;
+        return e.mods;
     }
 
 private:
     struct Entry {
         std::string sourcePath;
-        std::string text;
-        bool read = false;
+        std::string names;
+        std::string mods;
+        bool namesRead = false;
+        bool modsRead = false;
     };
+
+    Entry& Lookup(const PluginSDK::InventoryItem& item) {
+        Entry& e = m_map[item.Address];
+        if (e.sourcePath != item.Path) {
+            e = Entry{};
+            e.sourcePath = item.Path;
+        }
+        return e;
+    }
+
     std::unordered_map<uintptr_t, Entry> m_map;
-    int m_budget = 0;
+    int m_nameBudget = 0;
+    int m_modBudget = 0;
 };
 
 inline bool GridLayoutPlausible(const PluginSDK::Inventory& inv, float displayW) {
@@ -230,8 +269,9 @@ struct WithdrawCandidate {
 
 inline std::vector<WithdrawCandidate> CollectCandidates(
     const PluginSDK::Context* ctx, const PluginSDK::Inventory& inv,
-    float displayW, float displayH, ModTextCache* modCache, bool readMods) {
-    if (modCache) modCache->BeginScan();
+    float displayW, float displayH, ItemTextCache* textCache,
+    bool readNames, bool readMods) {
+    if (textCache) textCache->BeginScan();
     std::vector<WithdrawCandidate> out;
     for (const auto& item : inv.Items) {
         const auto r = ResolveItemRect(inv, item, displayW, displayH);
@@ -242,9 +282,9 @@ inline std::vector<WithdrawCandidate> CollectCandidates(
         c.stack = item.StackCount;
         c.rect = *r;
         c.search = BuildNameSearchText(item);
-        if (readMods && modCache) {
-            const std::string& mt = modCache->Get(ctx, item);
-            c.search += mt;
+        if (textCache) {
+            if (readNames) c.search += textCache->DirectNames(ctx, item);
+            if (readMods)  c.search += textCache->Mods(ctx, item);
         }
         out.push_back(std::move(c));
     }

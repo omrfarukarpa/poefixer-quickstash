@@ -1,5 +1,14 @@
 # Project memory
 
+## 2026-09-23 — Korece beta.1 geri bildirimi, 1.4.2-beta.2
+
+- Kanıt (Korece kullanıcı ekran görüntüleri, v1.4.2-beta.1, host v346): UI-tree `아이템 강조하기`, `speed` ve `속도` satırlarını doğru Korece gösteriyor; arama kutusu okuma sorunu kapandı. `speed` → TAKE (10), `속도` → TAKE (0). Kullanıcı beyanı: Seal Relic için `인장` ve `seal` → 0. poe2db kr: Seal Relic = `인장 유물`.
+- Kök neden daraltması: `ContainsCI` bayt bazlı ve UTF-8 Korece için eşleşmeyi bozmaz; liste isim alanı (`InventoryItem.BaseTypeName`, enumerate + `read_string`) ne `인장 유물` ne `Seal Relic` içeriyor. Mod eşleşmesi `FormatStat` (host .csd) İngilizce satırlarından geliyor; Korece stat metni eklentiye hiç ulaşmıyor. Host içindeki metin dönüşümü eklenti tarafından görülemiyor; upstream ExamplePlugin SDK 2026-08-23'ten beri değişmedi, v345/v346 notlarında Unicode maddesi yok.
+- Hipotez (doğrulanmadı): enumerate isimleri host'ta kayıplı daraltılıyor (önceki `??? ????` görüntüsü karakter başına bir `?`); plugin buffer'a yazan `read_item_base_type_name` yolu düzeltilen `get_text` gibi UTF-8 dönebilir.
+- Değişiklik: `ItemTextCache` (eski `ModTextCache`) filtre doluyken `ReadItemBaseTypeName`/`ReadItemUniqueName` sonucunu liste adından farklıysa isim havuzuna ekler (64/çağrı bütçe, adres+Path önbelleği). Debug "Diagnostics: text encoding report": filtre ve ilk 30 eşya için liste/direkt isim, mod metni, sınıf (`utf8`, `ascii+?`, `not-utf8`) ve hex; "Copy text report" panoya kopyalar ve `config/text-report.txt` yazar.
+- `kQuickStashVersion` ve README 1.4.2-beta.2. Temiz Release/x64 derleme 0 uyarı; DLL SHA-256 `adb8182313783b4b674a88c60755fb071dd8565759eb5812f77d76b3f2a7e6d0`, yerel kuruluma kopyalandı. Oyun içi doğrulama yok; otomatik test çalıştırılmadı.
+- Risk: İngilizce istemcide direkt isim liste adından farklı bir biçim dönerse (ör. iç kimlik) yanlış eşleşme üretebilir; beta.2 rapor/Debug tablosuyla kontrol edilmeli. Direkt yol da kayıplıysa isim ve Korece stat metni host düzeltmesi ister.
+
 ## 2026-09-23 — TAKE filtre düzeltmesi, v1.4.2-beta.1 yayını
 
 - Kullanıcının yeni bilgisi: geliştirici host'u düzelttikten sonra Korece istemcide TAKE görünür oldu; İngilizce sorguyla ilgisiz eşyaların sonuçlarda kaldığı bildirildi. Bu gerçek oyun gözlemi yerel olarak tekrar üretilemedi; 2026-09-22 host/SDK analizi artık bu belirti için blokaj olarak ele alınmıyor.
